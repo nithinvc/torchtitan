@@ -113,8 +113,8 @@ def build_weather_dataloader(
     batch_size = job_config.training.local_batch_size
     assert isinstance(dataset_path, str), "dataset_path must be a string"
 
-    dataset_path = join(dataset_path, "training_data")
     aux_data_path = join(dataset_path, "normalization")
+    dataset_path = join(dataset_path, "training_data")
     lead_time = pd.Timedelta(days=1)  # TODO (nithinc): hard coded config for now
     weather_dataset = ForecastingDataset(
         dataset_name=dataset_name,
@@ -146,8 +146,8 @@ def build_weather_validation_dataloader(
     batch_size = job_config.training.local_batch_size
     assert isinstance(dataset_path, str), "dataset_path must be a string"
 
-    dataset_path = join(dataset_path, "training_data")
     aux_data_path = join(dataset_path, "normalization")
+    dataset_path = join(dataset_path, "training_data")
     lead_time = pd.Timedelta(days=1)  # TODO (nithinc): hard coded config for now
     weather_dataset = ForecastingDataset(
         dataset_name=dataset_name,

@@ -37,7 +37,8 @@ local_batch_size = 8
 seq_len = 2048 # TOD0 
 max_norm = 1.0  # grad norm clipping
 steps = 10
-dataset = "aardvark-weather"  # supported datasets: c4_test (2K), c4 (177M)
+dataset = "aardvark-weather"  
+dataset_path = "/mnt/local_storage/weather/aardvark/aardvark"
 
 [parallelism]
 data_parallel_replicate_degree = 1

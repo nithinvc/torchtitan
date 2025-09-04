@@ -12,6 +12,7 @@ def mae_loss(pred: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     """Mean absolute error"""
     return torch.mean(torch.abs(pred.float() - labels.float().detach()))
 
+
 def build_mae_loss(job_config: JobConfig) -> LossFunction:
     loss_fn = mae_loss
     if job_config.compile.enable and "loss" in job_config.compile.components:
