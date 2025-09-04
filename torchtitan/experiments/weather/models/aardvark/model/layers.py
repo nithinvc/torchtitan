@@ -18,7 +18,7 @@ class ConvDeepSet(nn.Module):
 
     def compute_weights(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
         dists2 = self.pw_dists2(x1.unsqueeze(-1), x2.unsqueeze(-1))
-        return torch.exp((-0.5 * dists2) / (self.init_ls.to(x1.device)).pow(2))
+        return torch.exp((-0.5 * dists2) / (self.init_ls).pow(2))
 
     def pw_dists2(self, a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
         norms_a = torch.sum(a.pow(2), dim=-1)[..., :, None]
@@ -26,6 +26,7 @@ class ConvDeepSet(nn.Module):
         return norms_a + norms_b - 2 * torch.matmul(a, b.permute(0, 2, 1))
 
     def forward(self, x_in, wt: torch.Tensor, x_out):
+        # TODO (nithinc): shouldn't this be part of dataloading? Eventually we should move it out?
         density_channel = torch.ones_like(wt[:, 0:1, ...])
         density_channel[torch.isnan(wt[:, 0:1, ...])] = 0
         wt = torch.cat([density_channel, wt], dim=1)

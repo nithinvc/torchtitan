@@ -1,26 +1,11 @@
-import os
-import sys
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Any, Dict, Sequence
 
 import torch
 import torch.nn as nn
 
-# Ensure local working_dir is importable regardless of package context
-_THIS_DIR = os.path.dirname(__file__)
-_WORKING_DIR = os.path.join(_THIS_DIR, "working_dir")
-if _WORKING_DIR not in sys.path:
-    sys.path.append(_WORKING_DIR)
+from tensordict import TensorDictBase, tensorclass
 
-from tensordict import TensorDict, TensorDictBase, tensorclass  # type: ignore
-
-from .aardvark_utils import as_norm_4d, to_channels_first_4d, to_channels_last_4d
-from .architectures import DownscalingMLP
-from .layers import ConvDeepSet
-
-
-_to_channels_last_4d = to_channels_last_4d
-_to_channels_first_4d = to_channels_first_4d
-_as_norm_4d = as_norm_4d
+from .aardvark_utils import broadcast_to_4d, to_channels_first_4d, to_channels_last_4d
 
 
 @tensorclass
@@ -67,9 +52,7 @@ class E2ETask:
 
 class AardvarkE2E(nn.Module):
     """
-    Clean, modular Aardvark end-to-end model.
-
-    Major differences from research code:
+    Major differences from original implementation:
     - Accepts pre-built submodules (encoder/processor/decoder) instead of loading from disk
     - Avoids in-place mutation of the input task; uses non-mutating transformations
     - Normalization factors are passed explicitly and registered as buffers for device movement
@@ -92,9 +75,7 @@ class AardvarkE2E(nn.Module):
         super().__init__()
 
         if len(forecast_models) != lead_time:
-            raise ValueError(
-                f"Expected {lead_time} forecast models, got {len(forecast_models)}"
-            )
+            raise ValueError(f"Expected {lead_time} forecast models, got {len(forecast_models)}")
 
         self.se_model = se_model
         self.forecast_models = nn.ModuleList(list(forecast_models))
@@ -105,21 +86,21 @@ class AardvarkE2E(nn.Module):
         self.overwrite_channels = overwrite_channels
         self.base_context_exclude_tail = base_context_exclude_tail
 
+        # TODO (nithinc): will break in torchtitan
         # Normalization buffers for broadcasted arithmetic over (B, H, W, C)
-        fim = _as_norm_4d(normalization["input_mean"])  # mean_4u_1.npy
-        fis = _as_norm_4d(normalization["input_std"])   # std_4u_1.npy
-        pdm = _as_norm_4d(normalization["pred_diff_mean"])  # mean_diff_4u_1.npy
-        pds = _as_norm_4d(normalization["pred_diff_std"])   # std_diff_4u_1.npy
+        fim = broadcast_to_4d(normalization["input_mean"])  # mean_4u_1.npy
+        fis = broadcast_to_4d(normalization["input_std"])  # std_4u_1.npy
+        pdm = broadcast_to_4d(normalization["pred_diff_mean"])  # mean_diff_4u_1.npy
+        pds = broadcast_to_4d(normalization["pred_diff_std"])  # std_diff_4u_1.npy
 
         self.register_buffer("forecast_input_means", fim, persistent=False)
         self.register_buffer("forecast_input_stds", fis, persistent=False)
         self.register_buffer("forecast_pred_diff_means", pdm, persistent=False)
         self.register_buffer("forecast_pred_diff_stds", pds, persistent=False)
 
-    @torch.no_grad()
     def _process_se_output(
         self, forecast_y_context: torch.Tensor, se_out: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Non-mutating equivalent of original process_se_output.
 
@@ -130,7 +111,7 @@ class AardvarkE2E(nn.Module):
             updated_forecast_y_context, initial_state_for_return
         """
         # Place encoder output in the first N channels of forecast context
-        se_out_chw = _to_channels_first_4d(se_out)  # (B, C, H, W)
+        se_out_chw = to_channels_first_4d(se_out)  # (B, C, H, W)
         if se_out_chw.shape[1] < self.overwrite_channels:
             raise ValueError(
                 f"Encoder output channels {se_out_chw.shape[1]} < overwrite_channels {self.overwrite_channels}"
@@ -144,16 +125,15 @@ class AardvarkE2E(nn.Module):
         updated[:, : self.overwrite_channels, ...] = se_out_chw[:, : self.overwrite_channels, ...]
 
         # Initial state for return: de-normalised later, channels-last (B, H, W, C)
-        initial_state = _to_channels_last_4d(se_out)
+        initial_state = to_channels_last_4d(se_out)
         return updated, initial_state
 
-    @torch.no_grad()
     def _process_forecast_output(
         self,
         forecast_y_context: torch.Tensor,
         downscaling_y_context: torch.Tensor,
         processor_out: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Non-mutating equivalent of original process_forecast_output.
 
@@ -169,46 +149,40 @@ class AardvarkE2E(nn.Module):
         """
         # Build base context from forecast y_context (channels-first -> channels-last)
         base_context = forecast_y_context[:, : -self.base_context_exclude_tail, ...]
-        base_context = _to_channels_last_4d(base_context)  # (B, H, W, C')
+        base_context = to_channels_last_4d(base_context)  # (B, H, W, C')
 
         # Un-normalise base context
-        fim = self.forecast_input_means.to(base_context.device)
-        fis = self.forecast_input_stds.to(base_context.device)
-        base_context_unnorm = base_context * fis + fim
+        base_context_unnorm = base_context * self.forecast_input_stds + self.forecast_input_means
 
         # Processor produces per-channel differences; un-normalise predicted diffs
-        pdm = self.forecast_pred_diff_means.to(base_context_unnorm.device)
-        pds = self.forecast_pred_diff_stds.to(base_context_unnorm.device)
-        x = _to_channels_last_4d(processor_out)
-        x = pdm + x * pds
+        # processor_out is already channels last format
+        # x = to_channels_last_4d(processor_out)
+        x = processor_out
+        x = self.forecast_pred_diff_means + x * self.forecast_pred_diff_stds
 
         # Compute absolute forecast on channels-last
         forecast_grid = x + base_context_unnorm
 
         # Re-normalise for next steps
-        x_norm = (forecast_grid - fim) / fis  # channels-last
+        x_norm = (forecast_grid - self.forecast_input_means) / self.forecast_input_stds  # channels-last
 
         # Update downscaling context first N channels with normalised forecast
-        x_norm_chw = _to_channels_first_4d(x_norm)
+        # NOTE (nithinc): I think there might be a permute missing in this logic? But I'm not sure what's actually happening
+        x_norm_chw = to_channels_first_4d(x_norm)
         ds_updated = downscaling_y_context.clone()
         ds_updated[:, : self.overwrite_channels, ...] = x_norm_chw[:, : self.overwrite_channels, ...]
 
         # Roll forecast context: prepend new normalised channels, drop first N
-        fc_updated = torch.cat(
-            [x_norm_chw, forecast_y_context[:, self.overwrite_channels :, ...]], dim=1
-        )
+        fc_updated = torch.cat([x_norm_chw, forecast_y_context[:, self.overwrite_channels :, ...]], dim=1)
 
         return fc_updated, ds_updated, forecast_grid
 
-    @torch.no_grad()
     def forward(self, task: E2ETask):
         # 1) Encode assimilation inputs
         se_out = self.se_model(task.assimilation, film_index=None)
 
         # 2) Seed forecast y_context with encoder output (non-mutating)
-        forecast_y_context, initial_state_for_return = self._process_se_output(
-            task.forecast.y_context, se_out
-        )
+        forecast_y_context, initial_state_for_return = self._process_se_output(task.forecast.y_context, se_out)
 
         # Prepare a working downscaling y_context copy (non-mutating)
         downscaling_y_context = task.downscaling.y_context.clone()
@@ -234,9 +208,10 @@ class AardvarkE2E(nn.Module):
         station_preds = self.sf_model(ds_task_input, film_index=None)
 
         if self.return_gridded:
-            fim = self.forecast_input_means.to(initial_state_for_return.device)
-            fis = self.forecast_input_stds.to(initial_state_for_return.device)
-            initial_state_grid = initial_state_for_return * fis + fim
+            # TODO (nithinc): potential shape bug?
+            # B, W, C, H -> B, H, W, C
+            initial_state_for_return = initial_state_for_return.permute(0, 3, 1, 2)
+            initial_state_grid = initial_state_for_return * self.forecast_input_stds + self.forecast_input_means
             return station_preds, last_forecast_grid, initial_state_grid
 
         return station_preds
@@ -248,5 +223,3 @@ __all__ = [
     "E2ETask",
     "AardvarkE2E",
 ]
-
-

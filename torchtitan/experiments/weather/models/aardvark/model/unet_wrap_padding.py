@@ -155,9 +155,14 @@ class Up(nn.Module):
         super().__init__()
 
         self.film = film
-
-        # Always use transposed conv to avoid type ambiguity in linters
-        self.up = CylindricalConvTranspose2D(in_channels, out_channels, kernel_size=3, stride=stride)
+        if bilinear:
+            self.up = nn.Upsample(
+                scale_factor=2,
+                mode="bilinear",
+                align_corners=True,
+            )
+        else:
+            self.up = CylindricalConvTranspose2D(in_channels, out_channels, kernel_size=3, stride=stride) # type: ignore
 
         self.conv = Down(
             out_channels,

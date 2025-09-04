@@ -9,37 +9,7 @@ from functools import lru_cache
 import numpy as np
 import torch
 import torch.nn as nn
-try:  # type: ignore
-    from timm.models.vision_transformer import Block, PatchEmbed, trunc_normal_  # type: ignore
-except Exception:  # type: ignore
-    # Provide minimal fallbacks if timm is unavailable for static analysis
-    class PatchEmbed(nn.Module):  # type: ignore
-        def __init__(self, img_size, patch_size, in_chans, embed_dim):
-            super().__init__()
-            self.num_patches = (img_size[0] // patch_size) * (img_size[1] // patch_size)
-            self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
-
-        def forward(self, x):
-            x = self.proj(x)
-            B, C, H, W = x.shape
-            return x.flatten(2).transpose(1, 2)
-
-    class Block(nn.Module):  # type: ignore
-        def __init__(self, dim, num_heads, mlp_ratio, qkv_bias=True, drop_path=0.0, norm_layer=nn.LayerNorm, proj_drop=0.0):
-            super().__init__()
-            self.norm1 = norm_layer(dim)
-            self.attn = nn.MultiheadAttention(dim, num_heads, batch_first=True)
-            self.norm2 = norm_layer(dim)
-            self.mlp = nn.Sequential(nn.Linear(dim, int(dim * mlp_ratio)), nn.GELU(), nn.Linear(int(dim * mlp_ratio), dim))
-
-        def forward(self, x):
-            x = x + self.attn(self.norm1(x), self.norm1(x), self.norm1(x))[0]
-            x = x + self.mlp(self.norm2(x))
-            return x
-
-    def trunc_normal_(w, std=0.02):  # type: ignore
-        with torch.no_grad():
-            w.normal_(0, std)
+from timm.models.vision_transformer import Block, PatchEmbed, trunc_normal_  # type: ignore
 
 from .architectures import MLP  # type: ignore
 
@@ -256,9 +226,6 @@ class ViT(nn.Module):
 
         x = x.unflatten(dim=0, sizes=(b, l))
         return x
-
-    def mlp_embedding(self, x):
-        return
 
     def forward_encoder(self, x, lead_times, variables):
         if isinstance(variables, list):
