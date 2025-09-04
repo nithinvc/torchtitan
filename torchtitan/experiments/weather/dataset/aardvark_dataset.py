@@ -7,7 +7,7 @@ import xarray as xr
 import pandas as pd
 from os.path import join
 from dataclasses import dataclass, asdict
-from torchtitan.experiments.weather.dataset.data_sources import WeatherSources, Normalizer
+from torchtitan.experiments.weather.dataset.data_sources import WeatherSources, Normalizer, NaNHandler
 from torchtitan.components.dataloader import ParallelAwareDataloader
 from torchtitan.components.tokenizer import BaseTokenizer
 from torchtitan.config import JobConfig
@@ -25,6 +25,8 @@ class ForecastingDataset(IterableDataset, Stateful):
     sources: WeatherSources
     targets: WeatherSources
     normalization: Normalizer
+    tokenizer: BaseTokenizer | None
+    NaNHandler: NaNHandler | None
 
     # iterator state
     _sample_idx: int
@@ -39,6 +41,8 @@ class ForecastingDataset(IterableDataset, Stateful):
         start_date: pd.Timestamp,
         end_date: pd.Timestamp,
         infinite: bool = True,
+        tokenizer: BaseTokenizer | None = None,
+        NaNHandler: NaNHandler | None = None,
     ):
         print(
             "Making dataset with dataset_name:",
@@ -69,6 +73,8 @@ class ForecastingDataset(IterableDataset, Stateful):
         self.difference_normalization = Normalizer(aux_data_path, is_diff=True)
         self._sample_idx = 0
         self.infinite = infinite
+        self.tokenizer = tokenizer
+        self.NaNHandler = NaNHandler
 
     def __len__(self):
         return self.sources.igra.time.shape[0]
@@ -81,8 +87,12 @@ class ForecastingDataset(IterableDataset, Stateful):
         targets = self.targets.isel(time=index + lead_time_index).materialize()
         sources = self.normalization.normalize(sources)
         targets = self.normalization.normalize(targets)
-
-        # Convert to tensordict
+        if self.NaNHandler is not None:
+            sources = self.NaNHandler(sources)
+            targets = self.NaNHandler(targets)
+        if self.tokenizer is not None:
+            sources = self.tokenizer.encode(sources)
+            targets = self.tokenizer.encode(targets)
         return sources.to_tensordict(), targets.to_tensordict()
 
     def __iter__(self):
@@ -93,6 +103,19 @@ class ForecastingDataset(IterableDataset, Stateful):
         else:
             for index in range(len(self)):
                 yield self[index]
+
+
+def collate_fn(batch, *args, **kwargs):
+    n_returns = len(batch[0])
+    output = []
+    for i in range(n_returns):
+        output.append(torch.stack([batch[j][i] for j in range(len(batch))]))
+
+    # TODO (nithinc): train.py expects input as a key in a dict for the input_dict
+    output[0] = {
+        "input": output[0],
+    }
+    return output
 
 
 train_start_date = pd.Timestamp("2007-01-01")
@@ -124,12 +147,15 @@ def build_weather_dataloader(
         start_date=train_start_date,  # type: ignore
         end_date=train_end_date,  # type: ignore
         infinite=infinite,
+        tokenizer=tokenizer,
+        NaNHandler=NaNHandler(),
     )
     return ParallelAwareDataloader(
         dataset=weather_dataset,
         dp_rank=dp_rank,
         dp_world_size=dp_world_size,
         batch_size=batch_size,
+        collate_fn=collate_fn,
     )
 
 
@@ -157,10 +183,13 @@ def build_weather_validation_dataloader(
         start_date=val_start_date,  # type: ignore
         end_date=val_end_date,  # type: ignore
         infinite=infinite,
+        tokenizer=tokenizer,
+        NaNHandler=NaNHandler(),
     )
     return ParallelAwareDataloader(
         dataset=weather_dataset,
         dp_rank=dp_rank,
         dp_world_size=dp_world_size,
         batch_size=batch_size,
+        collate_fn=collate_fn,
     )

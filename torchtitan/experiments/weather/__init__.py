@@ -9,7 +9,7 @@ from .models.simple_llama3.infra.parallelize import parallelize_llama
 from .models.simple_llama3.infra.pipeline import pipeline_llama
 from .loss import build_mae_loss
 from .models.simple_llama3.model.args import SimpleLlama3ModelArgs
-
+from .dataset.tokenizer import build_weather_tokenizer
 from torchtitan.components.validate import build_validator
 
 # needed
@@ -37,7 +37,7 @@ register_train_spec(
         build_optimizers_fn=build_optimizers,
         build_lr_schedulers_fn=build_lr_schedulers,
         build_dataloader_fn=build_weather_dataloader,
-        build_tokenizer_fn=None,  # TODO
+        build_tokenizer_fn=build_weather_tokenizer,
         build_loss_fn=build_mae_loss,
         build_validator_fn=build_validator,  # TODO
         state_dict_adapter=None,
