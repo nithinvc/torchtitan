@@ -120,7 +120,11 @@ class Down(nn.Module):
             )
 
     def forward(self, xi: torch.Tensor, film_index: torch.Tensor | None = None) -> torch.Tensor:
-        film_index = (film_index[:, 0].int() if film_index is not None else torch.zeros(xi.shape[0], dtype=torch.long, device=xi.device))
+        film_index = (
+            film_index[:, 0].int()
+            if film_index is not None
+            else torch.zeros(xi.shape[0], dtype=torch.long, device=xi.device)
+        )
 
         x = self.conv_1(xi)
         x = self.bn_1(x)
@@ -162,7 +166,7 @@ class Up(nn.Module):
                 align_corners=True,
             )
         else:
-            self.up = CylindricalConvTranspose2D(in_channels, out_channels, kernel_size=3, stride=stride) # type: ignore
+            self.up = CylindricalConvTranspose2D(in_channels, out_channels, kernel_size=3, stride=stride)  # type: ignore
 
         self.conv = Down(
             out_channels,
@@ -291,5 +295,3 @@ __all__ = [
     "CylindricalConvTranspose2D",
     "Unet",
 ]
-
-

@@ -5,7 +5,11 @@ import torch.nn as nn
 
 from tensordict import TensorDictBase, tensorclass
 
-from .aardvark_utils import broadcast_to_4d, to_channels_first_4d, to_channels_last_4d
+from torchtitan.experiments.weather.models.aardvark.model.aardvark_utils import (
+    broadcast_to_4d,
+    to_channels_first_4d,
+    to_channels_last_4d,
+)
 
 
 @tensorclass
@@ -223,3 +227,11 @@ __all__ = [
     "E2ETask",
     "AardvarkE2E",
 ]
+
+
+if __name__ == "__main__":
+    from tensordict import TensorDict
+
+    batch = torch.load("batch.pt")
+    batch_size = 4
+    batch = torch.stack([TensorDict(batch) for _ in range(4)])

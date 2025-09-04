@@ -72,5 +72,3 @@ class ConvDeepSet(nn.Module):
 __all__ = [
     "ConvDeepSet",
 ]
-
-

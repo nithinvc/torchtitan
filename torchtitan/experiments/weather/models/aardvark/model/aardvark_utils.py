@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import torch
 
 
@@ -37,9 +35,7 @@ def broadcast_to_4d(x: torch.Tensor) -> torch.Tensor:
     if x.dim() == 4:
         if x.shape[0] == 1 and x.shape[1] == 1 and x.shape[2] == 1:
             return x
-    raise ValueError(
-        f"Normalization tensor must be (C,) or (1,1,1,C), got shape {tuple(x.shape)}"
-    )
+    raise ValueError(f"Normalization tensor must be (C,) or (1,1,1,C), got shape {tuple(x.shape)}")
 
 
 __all__ = [
@@ -47,5 +43,3 @@ __all__ = [
     "to_channels_first_4d",
     "broadcast_to_4d",
 ]
-
-

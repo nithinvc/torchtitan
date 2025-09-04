@@ -62,5 +62,3 @@ __all__ = [
     "DownscalingMLP",
     "MLP",
 ]
-
-

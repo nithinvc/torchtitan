@@ -6,7 +6,12 @@ import torch.nn as nn
 
 from tensordict import TensorDict  # type: ignore
 
-from torchtitan.experiments.weather.models.aardvark.model.model import AardvarkE2E, ForecastTask, DownscalingTask, E2ETask
+from torchtitan.experiments.weather.models.aardvark.model.model import (
+    AardvarkE2E,
+    ForecastTask,
+    DownscalingTask,
+    E2ETask,
+)
 
 
 class DummyEncoder(nn.Module):
@@ -63,7 +68,7 @@ def ref_process(
     last_forecast = None
 
     for p_out in processors_out:
-        base = fc[:, : -base_context_exclude_tail]  # (B,C',H,W)
+        base = fc[:, :-base_context_exclude_tail]  # (B,C',H,W)
         base = base.permute(0, 2, 3, 1)  # (B,H,W,C')
         base_unnorm = base * fis + fim
 
@@ -158,9 +163,7 @@ class TestAardvarkE2E(unittest.TestCase):
 
         # Reference computation using same stubs and math
         # Processors_out are channel-last diffs
-        processors_out = [
-            torch.full((self.B, self.H, self.W, self.C), 0.1) for _ in range(len(self.forecasters))
-        ]
+        processors_out = [torch.full((self.B, self.H, self.W, self.C), 0.1) for _ in range(len(self.forecasters))]
 
         fc, ds, last_forecast, initial_state = ref_process(
             self.overwrite_channels,
@@ -224,5 +227,3 @@ class TestAardvarkE2E(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
