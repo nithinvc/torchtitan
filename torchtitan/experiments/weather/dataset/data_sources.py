@@ -4,10 +4,15 @@ from dataclasses import dataclass, asdict
 import pandas as pd
 from os.path import join
 from torchtitan.experiments.weather.dataset.xarray_utils import xarray_to_tensor
-
+import torch
 
 ## data sources and utils
 
+@tensordict.tensorclass
+class ObservationData:
+    observation: torch.Tensor
+    lon: torch.Tensor
+    lat: torch.Tensor
 
 def convert_hadisd_to_tensordict(ds: xr.Dataset) -> tensordict.TensorDict:
     # Hadisd is in a different format since it is per station observations and we don't have correspondences over the variables
