@@ -1,5 +1,6 @@
 from torchtitan.components.tokenizer import BaseTokenizer
 from torchtitan.config import JobConfig
+from torchtitan.experiments.weather.dataset.data_sources import WeatherSources
 from typing_extensions import override
 
 

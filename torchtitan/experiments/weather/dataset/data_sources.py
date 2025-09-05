@@ -3,10 +3,10 @@ import tensordict
 from dataclasses import dataclass, asdict
 import pandas as pd
 from os.path import join
-from torchtitan.experiments.weather.dataset.xarray_utils import xarray_to_tensor
 import torch
-
+import numpy as np
 ## data sources and utils
+
 
 @tensordict.tensorclass
 class ObservationData:
@@ -14,48 +14,87 @@ class ObservationData:
     lon: torch.Tensor
     lat: torch.Tensor
 
+
+    def __getitem__(self, key: str) -> torch.Tensor:
+        if key == "observation":
+            return self.observation
+        elif key == "lon":
+            return self.lon
+        elif key == "lat":
+            return self.lat
+        else:
+            raise ValueError(f"Invalid key: {key}")
+
+
+def convert_field_to_tensordict(ds: xr.Dataset) -> ObservationData:
+    obs = None
+    lon = None
+    lat = None
+
+    if 'longitude' in ds:
+        lon = ds.longitude.values
+    if 'latitude' in ds:
+        lat = ds.latitude.values
+    if 'lon' in ds:
+        lon = ds.lon.values
+    if 'lat' in ds:
+        lat = ds.lat.values
+
+    variables = list(ds.data_vars)
+    # remove lon and lat from variables
+    if 'lon' in variables:
+        variables.remove("lon")
+    if 'lat' in variables:
+        variables.remove("lat")
+
+    if 'longitude' in variables:
+        variables.remove("longitude")
+    if 'latitude' in variables:
+        variables.remove("latitude")
+
+    obs = [ds[k].values for k in variables]
+    obs = np.stack(obs, axis=0)
+    return ObservationData(observation=obs, lon=lon, lat=lat)
+
+
+
 def convert_hadisd_to_tensordict(ds: xr.Dataset) -> tensordict.TensorDict:
     # Hadisd is in a different format since it is per station observations and we don't have correspondences over the variables
     # variables: tas, ws, wd, psi, tds
     tas = {
-        "tas": ds.tas.values,
+        "observation": ds.tas.values,
         "lon": ds.tas_lon.values,
         "lat": ds.tas_lat.values,
-        "station_index": ds.station_index_tas.values,
     }
-    tas = tensordict.TensorDict(**tas)
+    tas = ObservationData(**tas)
 
     ws = {
-        "ws": ds.ws.values,
+        "observation": ds.ws.values,
         "lon": ds.ws_lon.values,
         "lat": ds.ws_lat.values,
-        "station_index": ds.station_index_ws.values,
     }
-    ws = tensordict.TensorDict(**ws)
+    ws = ObservationData(**ws)
 
     wd = {
-        "wd": ds.wd.values,
+        "observation": ds.wd.values,
         "lon": ds.wd_lon.values,
         "lat": ds.wd_lat.values,
-        "station_index": ds.station_index_wd.values,
     }
-    wd = tensordict.TensorDict(**wd)
+    wd = ObservationData(**wd)
 
     psl = {
-        "psl": ds.psl.values,
+        "observation": ds.psl.values,
         "lon": ds.psl_lon.values,
         "lat": ds.psl_lat.values,
-        "station_index": ds.station_index_psl.values,
     }
-    psl = tensordict.TensorDict(**psl)
+    psl = ObservationData(**psl)
 
     tds = {
-        "tds": ds.tds.values,
+        "observation": ds.tds.values,
         "lon": ds.tds_lon.values,
         "lat": ds.tds_lat.values,
-        "station_index": ds.station_index_tds.values,
     }
-    tds = tensordict.TensorDict(**tds)
+    tds = ObservationData(**tds)
 
     return tensordict.TensorDict(
         {
@@ -83,7 +122,16 @@ class WeatherSources:
     @property
     def sources(self) -> list[xr.Dataset]:
         # Returns the list of all datasets to apply multi-source transforms
-        return [self.amsua, self.amsub, self.ascat, self.gridsat, self.hadisd, self.iasi, self.icoads, self.igra]
+        return [
+            self.amsua,
+            self.amsub,
+            self.ascat,
+            self.gridsat,
+            self.hadisd,
+            self.iasi,
+            self.icoads,
+            self.igra,
+        ]
 
     @property
     def dt(self) -> pd.Timedelta:
@@ -108,11 +156,17 @@ class WeatherSources:
         return WeatherSources(amsua, amsub, ascat, gridsat, hadisd, iasi, icoads, igra)
 
     def to_range(
-        self, start_date: pd.Timestamp | pd.Timedelta | None = None, end_date: pd.Timestamp | pd.Timedelta | None = None
+        self,
+        start_date: pd.Timestamp | pd.Timedelta | None = None,
+        end_date: pd.Timestamp | pd.Timedelta | None = None,
     ):
-        assert start_date is not None or end_date is not None, "Either start_date or end_date must be provided"
+        assert start_date is not None or end_date is not None, (
+            "Either start_date or end_date must be provided"
+        )
 
-        new_sources = [source.sel(time=slice(start_date, end_date)) for source in self.sources]
+        new_sources = [
+            source.sel(time=slice(start_date, end_date)) for source in self.sources
+        ]
         return WeatherSources(*new_sources)
 
     def isel(self, **kwargs) -> "WeatherSources":
@@ -128,7 +182,7 @@ class WeatherSources:
         out_vals = {}
         for k, v in source.items():
             if k != "hadisd":
-                out_vals[k] = xarray_to_tensor(v)
+                out_vals[k] = convert_field_to_tensordict(v)
             else:
                 out_vals[k] = convert_hadisd_to_tensordict(v)
         return tensordict.TensorDict(out_vals)
@@ -170,16 +224,24 @@ class Normalizer:
         self.ascat_mean = xr.load_dataset(join(data_path, f"ascat{suffix}_mean_v1.nc"))
         self.ascat_std = xr.load_dataset(join(data_path, f"ascat{suffix}_std_v1.nc"))
 
-        self.gridsat_mean = xr.load_dataset(join(data_path, f"gridsat{suffix}_mean_v1.nc"))
-        self.gridsat_std = xr.load_dataset(join(data_path, f"gridsat{suffix}_std_v1.nc"))
+        self.gridsat_mean = xr.load_dataset(
+            join(data_path, f"gridsat{suffix}_mean_v1.nc")
+        )
+        self.gridsat_std = xr.load_dataset(
+            join(data_path, f"gridsat{suffix}_std_v1.nc")
+        )
 
-        self.hadisd_mean = xr.load_dataset(join(data_path, f"hadisd{suffix}_mean_v1.nc"))
+        self.hadisd_mean = xr.load_dataset(
+            join(data_path, f"hadisd{suffix}_mean_v1.nc")
+        )
         self.hadisd_std = xr.load_dataset(join(data_path, f"hadisd{suffix}_std_v1.nc"))
 
         self.iasi_mean = xr.load_dataset(join(data_path, f"iasi{suffix}_mean_v1.nc"))
         self.iasi_std = xr.load_dataset(join(data_path, f"iasi{suffix}_std_v1.nc"))
 
-        self.icoads_mean = xr.load_dataset(join(data_path, f"icoads{suffix}_mean_v1.nc"))
+        self.icoads_mean = xr.load_dataset(
+            join(data_path, f"icoads{suffix}_mean_v1.nc")
+        )
         self.icoads_std = xr.load_dataset(join(data_path, f"icoads{suffix}_std_v1.nc"))
 
         self.igra_mean = xr.load_dataset(join(data_path, f"igra{suffix}_mean_v1.nc"))
