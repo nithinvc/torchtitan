@@ -35,9 +35,9 @@ def convert_field_to_tensordict(ds: xr.Dataset) -> ObservationData:
         lon = ds.longitude.values
     if 'latitude' in ds:
         lat = ds.latitude.values
-    if 'lon' in ds:
+    if 'lon' in ds and lon is None:
         lon = ds.lon.values
-    if 'lat' in ds:
+    if 'lat' in ds and lat is None:
         lat = ds.lat.values
 
     variables = list(ds.data_vars)

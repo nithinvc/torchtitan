@@ -4,6 +4,9 @@ from torchtitan.protocols.train_spec import register_train_spec, TrainSpec
 
 from typing import Any
 from .dataset.aardvark_dataset import build_weather_dataloader
+from .models.aardvark.model.args import AardvarkModelArgs
+from .models.aardvark.model.model import AardvarkE2E
+from .models.aardvark.infra.parallelize import parallelize_aardvark
 from .models.simple_llama3.model.model import SimpleLlama3Model
 from .models.simple_llama3.infra.parallelize import parallelize_llama
 from .models.simple_llama3.infra.pipeline import pipeline_llama
@@ -38,6 +41,27 @@ register_train_spec(
         build_lr_schedulers_fn=build_lr_schedulers,
         build_dataloader_fn=build_weather_dataloader,
         build_tokenizer_fn=build_weather_tokenizer,
+        build_loss_fn=build_mae_loss,
+        build_validator_fn=build_validator,  # TODO
+        state_dict_adapter=None,
+    )
+)
+
+aardvark_config = {
+    "aardvark-debug": AardvarkModelArgs(lead_time=1, return_gridded=False),
+}
+
+register_train_spec(
+    TrainSpec(
+        name="aardvark-weather",
+        model_cls=AardvarkE2E,
+        model_args=aardvark_config,
+        parallelize_fn=parallelize_aardvark,
+        pipelining_fn=None,
+        build_optimizers_fn=build_optimizers,
+        build_lr_schedulers_fn=build_lr_schedulers,
+        build_dataloader_fn=build_weather_dataloader,
+        build_tokenizer_fn=None,
         build_loss_fn=build_mae_loss,
         build_validator_fn=build_validator,  # TODO
         state_dict_adapter=None,

@@ -148,9 +148,16 @@ def get_sample_batch():
     era_lon = sample_batch["assimilation"]["era5_x_current"][0]
     era_lat = sample_batch["assimilation"]["era5_x_current"][1]
     era_lonlat = sample_batch["assimilation"]["era5_lonlat_current"]
+    era_lon = era_lon.cuda()
+    era_lat = era_lat.cuda()
+    era_climatology = era_climatology.cuda()
+    era5_elev = era5_elev.cuda()
+    era_lonlat = era_lonlat.cuda()
     return era_lon, era_lat, era_climatology, era5_elev, era_lonlat
 
 def convert_to_aardvark_format(src: dict, trg: dict) -> tuple[dict, dict]:
+    src = src.cuda()
+    trg = trg.cuda()
     # TODO (nithinc): remove this hardcoding - and make sure it doesn't keep loading data
     era_lon, era_lat, era_climatology, era5_elev, era_lonlat = get_sample_batch()
     inputs = {}
@@ -176,6 +183,7 @@ def convert_to_aardvark_format(src: dict, trg: dict) -> tuple[dict, dict]:
     lon = src["hadisd"][target_var]["lon"]
     lat = src["hadisd"][target_var]["lat"]
     x_target = torch.stack([lon, lat], dim=1)
+    inputs["downscaling"]["x_target"] = x_target
 
     y_context = torch.empty(0)  # Upstream prediction from processor - shape B,C,lon,lat
     inputs["downscaling"]["y_context"] = y_context
@@ -199,10 +207,11 @@ def convert_to_aardvark_format(src: dict, trg: dict) -> tuple[dict, dict]:
     climatology_current = era_climatology
     inputs["assimilation"]["climatology_current"] = climatology_current
 
-    sat_x_current = [src['icoads']['lon'], src['icoads']['lat']] # [batch['icoads']['lon'], batch['icoads']['lat']]
+    sat_x_current = [src['gridsat']['lon'], src['gridsat']['lat']] # [batch['icoads']['lon'], batch['icoads']['lat']]
     inputs["assimilation"]["sat_x_current"] = sat_x_current
 
     sat_current = src['gridsat']['observation'] # batch['gridsat']['observation']
+    sat_current  = sat_current.permute(0, 1, 3, 2)
     inputs["assimilation"]["sat_current"] = sat_current
 
     icoads_x_current = [src['icoads']['lon'], src['icoads']['lat']] 
@@ -224,7 +233,9 @@ def convert_to_aardvark_format(src: dict, trg: dict) -> tuple[dict, dict]:
     inputs["assimilation"]["amsua_x_current"] = amsua_x_current
 
     amsub_current = src['amsub']['observation'].permute(0, 2, 3, 1) #  channel last format
+    amsub_current = amsub_current.permute(0, 2, 1, 3)
     inputs["assimilation"]["amsub_current"] = amsub_current
+
 
     amsub_x_current = [src['amsub']['lon'], src['amsub']['lat']] 
     inputs["assimilation"]["amsub_x_current"] = amsub_x_current

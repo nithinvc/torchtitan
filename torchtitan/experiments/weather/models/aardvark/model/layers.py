@@ -17,13 +17,13 @@ class ConvDeepSet(nn.Module):
         self.device = device
 
     def compute_weights(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
-        dists2 = self.pw_dists2(x1.unsqueeze(-1), x2.unsqueeze(-1))
-        return torch.exp((-0.5 * dists2) / (self.init_ls).pow(2))
+        dists2 = self.pw_dists2(x1.unsqueeze(-1), x2.unsqueeze(-1)).cuda()
+        return torch.exp((-0.5 * dists2) / (self.init_ls.cuda()).pow(2))
 
     def pw_dists2(self, a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-        norms_a = torch.sum(a.pow(2), dim=-1)[..., :, None]
-        norms_b = torch.sum(b.pow(2), dim=-1)[..., None, :]
-        return norms_a + norms_b - 2 * torch.matmul(a, b.permute(0, 2, 1))
+        norms_a = torch.sum(a.pow(2), dim=-1)[..., :, None].cuda().float()
+        norms_b = torch.sum(b.pow(2), dim=-1)[..., None, :].cuda().float()
+        return norms_a + norms_b - 2 * torch.matmul(a.float().cuda(), b.permute(0, 2, 1).float().cuda())
 
     def forward(self, x_in, wt: torch.Tensor, x_out):
         # TODO (nithinc): shouldn't this be part of dataloading? Eventually we should move it out?
@@ -40,7 +40,7 @@ class ConvDeepSet(nn.Module):
             ws = [self.compute_weights(xzi, xi) for xzi, xi in zip(x_in, x_out)]
             ws[0] = ws[0] * in_lon_mask.unsqueeze(-1).int()
             ws[1] = ws[1] * in_lat_mask.unsqueeze(-1).int()
-            ee = torch.einsum("...cw,...wx,...wy->...cxy", wt, ws[0], ws[1])
+            ee = torch.einsum("...cw,...wx,...wy->...cxy", wt.float(), ws[0].float(), ws[1].float())
 
         elif self.mode == "OnToOn":
             ws = [self.compute_weights(xzi, xi) for xzi, xi in zip(x_in, x_out)]

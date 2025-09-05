@@ -130,7 +130,7 @@ class ViT(nn.Module):
 
         self.out_dim = out_channels
         self.pos_drop = nn.Dropout(p=drop_rate)
-        dpr = [x.item() for x in torch.linspace(0, drop_path, depth)]
+        dpr = [x for x in np.linspace(0, drop_path, depth)]
         self.blocks = nn.ModuleList(
             [
                 Block(
@@ -154,9 +154,16 @@ class ViT(nn.Module):
         head_layers.append(nn.Linear(embed_dim, self.out_dim * patch_size**2))
         self.head = nn.Sequential(*head_layers)
 
+
         self.initialize_weights()
         if not self.per_var_embedding:
             self.mlp = MLP(in_channels=277, out_channels=256)
+
+        self._proj = None
+        # self.construct_proj()
+
+    def construct_proj(self):
+        self._proj = nn.Linear(212, 277) # TODO (nithinc): remove this
 
     def initialize_weights(self):
         pos_embed = get_2d_sincos_pos_embed(
@@ -245,6 +252,9 @@ class ViT(nn.Module):
             x = self.aggregate_variables(x)
 
         else:
+            x = x.float()
+            if self._proj:
+                x = self._proj(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
             x = self.mlp(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
             x = self.token_embeds[0](x)
 
@@ -264,9 +274,11 @@ class ViT(nn.Module):
         return x
 
     def forward(self, x, lead_times=None, film_index=None):
-        if lead_times is None:
+        if lead_times is None or lead_times.shape[0] == 0:
             lead_times = torch.ones(x.shape[0], device=x.device).float().unsqueeze(-1)
 
+        lead_times = lead_times.cuda()
+        x = x.cuda()
         out_transformers = self.forward_encoder(x, lead_times[:, 0], self.default_vars)
         preds = self.head(out_transformers)
         preds = self.unpatchify(preds)

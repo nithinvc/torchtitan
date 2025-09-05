@@ -124,10 +124,10 @@ class ConvCNPWeather(nn.Module):
             encodings.append(
                 self.hadisd_setconvs[channel](
                     x_in=[
-                        task["x_context_hadisd_{}".format(prefix)][channel][:, 0, :],
-                        task["x_context_hadisd_{}".format(prefix)][channel][:, 1, :],
+                        task["x_context_hadisd_{}".format(prefix)][channel][:, 0, :].cuda(),
+                        task["x_context_hadisd_{}".format(prefix)][channel][:, 1, :].cuda(),
                     ],
-                    wt=task["y_context_hadisd_{}".format(prefix)][channel].unsqueeze(1),
+                    wt=task["y_context_hadisd_{}".format(prefix)][channel].unsqueeze(1).cuda(),
                     x_out=self.int_grid,
                 )
             )
@@ -196,9 +196,9 @@ class ConvCNPWeather(nn.Module):
 
         encodings = []
         task["amsub_{}".format(prefix)][task["amsub_{}".format(prefix)] == 0] = np.nan
-        for i in range(12):
+        for i in range(10): # TODO This is 12 for them but 10 for us?
             encodings.append(
-                self.amsua_setconvs[i](
+                self.amsub_setconvs[i](
                     x_in=task["amsub_x_{}".format(prefix)],
                     wt=task["amsub_{}".format(prefix)].permute(0, 3, 1, 2)[:, i : i + 1, ...],
                     x_out=self.int_grid,
@@ -286,10 +286,10 @@ class ConvCNPWeather(nn.Module):
                     self.encoder_amsua(task, "current"),
                     self.encoder_amsub(task, "current"),
                     self.encoder_igra(task, "current"),
-                    self.encoder_hirs(task, "current"),
+                    # self.encoder_hirs(task, "current"),
                     elev,
                     task["climatology_current"],
-                    torch.ones_like(elev[:, :5, ...]) * task["aux_time_current"].unsqueeze(-1).unsqueeze(-1),
+                    # torch.ones_like(elev[:, :5, ...]) * task["aux_time_current"].unsqueeze(-1).unsqueeze(-1), # TODO (nithinc): time encoding?
                 ]
             else:
                 # Option to pass two timesteps (t=-1 and t=0) as input
@@ -316,6 +316,10 @@ class ConvCNPWeather(nn.Module):
                     task["climatology_current"],
                     torch.ones_like(elev[:, :5, ...]) * task["aux_time_current"].unsqueeze(-1).unsqueeze(-1),
                 ]
+            encodings = [i.cuda() for i in encodings]
+            batch_size = encodings[0].shape[0]
+            encodings[-1] = encodings[-1].repeat(batch_size, 1, 1, 1)
+            encodings[-2] = encodings[-2].repeat(batch_size, 1, 1, 1)
             x = torch.cat(encodings, dim=1)
 
         else:

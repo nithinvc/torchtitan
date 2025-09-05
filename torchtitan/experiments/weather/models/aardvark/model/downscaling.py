@@ -104,13 +104,21 @@ class ConvCNPWeatherOnToOff(nn.Module):
             h_channels=64,
             h_layers=2,
         )
+        self.proj = None
+
+
+    def proj1(self, x):
+        if self.proj is None:
+            self.proj = nn.Linear(27, 33).cuda().float()
+        return self.proj(x.float())
 
     def forward(self, task, film_index):
         x = task["y_context"]
         batch_size = x.shape[0]
 
         # UNet backbone
-        x = self.decoder_lr(x, film_index=task["lt"])
+        lt = torch.zeros((batch_size, 1)).cuda()
+        x = self.decoder_lr(x, film_index=lt)
 
         # Transform to station predictions with setconv
         num_channels = x.shape[3]
@@ -128,18 +136,24 @@ class ConvCNPWeatherOnToOff(nn.Module):
         assert x.shape[2] == num_stations
 
         # Concatenate auxiliary data at stations
-        alt_target = task["alt_target"]
-        assert torch.isnan(alt_target).sum() == 0
-        assert alt_target.shape[0] == batch_size
-        assert alt_target.shape[2] == num_stations
+        # alt_target = task["alt_target"]
+        # assert torch.isnan(alt_target).sum() == 0
+        # assert alt_target.shape[0] == batch_size
+        # assert alt_target.shape[2] == num_stations
 
-        aux_time = task["aux_time"].squeeze(-1).repeat(1, 1, num_stations)
+        aux_time = torch.zeros((batch_size, 1, num_stations)).cuda().float()
+        # aux_time = task["aux_time"].squeeze(-1).repeat(1, 1, num_stations)
+
         assert aux_time.shape[0] == batch_size
         assert aux_time.shape[2] == num_stations
 
-        x = torch.cat([x, alt_target, x_target, aux_time], dim=1).permute(0, 2, 1)
+        # x = torch.cat([x, alt_target, x_target, aux_time], dim=1).permute(0, 2, 1)
+        x = torch.cat([x, x_target, aux_time], dim=1).permute(0, 2, 1)
         assert x.shape[0] == batch_size
         assert x.shape[1] == num_stations
+
+
+        x = self.proj1(x)
 
         tmp = self.mlp(x)
         assert list(tmp.shape) == [batch_size, num_stations, 1]
