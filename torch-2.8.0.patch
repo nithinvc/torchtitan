@@ -1,0 +1,54 @@
+diff --git a/torchtitan/components/checkpoint.py b/torchtitan/components/checkpoint.py
+index e9e7014..2de644c 100644
+--- a/torchtitan/components/checkpoint.py
++++ b/torchtitan/components/checkpoint.py
+@@ -23,10 +23,15 @@ from torch.distributed.checkpoint import (
+     HuggingFaceStorageReader,
+     HuggingFaceStorageWriter,
+ )
+-from torch.distributed.checkpoint._consolidate_hf_safetensors import (
+-    consolidate_safetensors_files_on_every_rank,
+-)
+-from torch.distributed.checkpoint.staging import DefaultStager, StagingOptions
++# from torch.distributed.checkpoint._consolidate_hf_safetensors import (
++#     consolidate_safetensors_files_on_every_rank,
++# )
++
++
++consolidate_safetensors_files_on_every_rank = None
++# from torch.distributed.checkpoint.staging import DefaultStager, StagingOptions
++DefaultStager = None
++StagingOptions = None
+ from torch.distributed.checkpoint.state_dict import (
+     get_model_state_dict,
+     set_model_state_dict,
+diff --git a/torchtitan/distributed/pipeline_parallel.py b/torchtitan/distributed/pipeline_parallel.py
+index c4c8768..94d6ea0 100644
+--- a/torchtitan/distributed/pipeline_parallel.py
++++ b/torchtitan/distributed/pipeline_parallel.py
+@@ -18,10 +18,10 @@ from torch.distributed.pipelining.schedules import (
+     get_schedule_class,
+     PipelineScheduleMulti,
+     PipelineScheduleSingle,
+-    ScheduleDualPipeV,
+     ScheduleZBVZeroBubble,
+ )
+ 
++ScheduleDualPipeV = None
+ from torchtitan.config import JobConfig
+ from torchtitan.tools.logging import logger
+ 
+diff --git a/torchtitan/models/attention.py b/torchtitan/models/attention.py
+index f66361a..f35deaa 100644
+--- a/torchtitan/models/attention.py
++++ b/torchtitan/models/attention.py
+@@ -11,7 +11,8 @@ from typing import Callable, ClassVar
+ 
+ import torch
+ import torch.nn.functional as F
+-from torch.distributed.tensor.experimental._attention import create_cp_block_mask
++# from torch.distributed.tensor.experimental._attention import create_cp_block_mask
++create_cp_block_mask = None
+ from torch.nn.attention import sdpa_kernel, SDPBackend
+ from torch.nn.attention.flex_attention import (
+     _mask_mod_signature,
