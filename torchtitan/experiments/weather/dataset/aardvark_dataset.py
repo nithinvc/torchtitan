@@ -1,4 +1,5 @@
 import functools
+from tensordict import TensorDict
 from os.path import join
 import numpy as np
 import torch
@@ -113,7 +114,7 @@ class ForecastingDataset(IterableDataset, Stateful):
                 yield self[index]
 
 
-def collate_fn(batch, *args, use_aardvark_format: bool = True,**kwargs):
+def collate_fn(batch, *args, use_aardvark_format: bool = True, **kwargs):
     n_returns = len(batch[0])
     output = []
     for i in range(n_returns):
@@ -127,13 +128,36 @@ def collate_fn(batch, *args, use_aardvark_format: bool = True,**kwargs):
         output[1] = trg
 
     # TODO (nithinc): train.py expects input as a key in a dict for the input_dict
-    output[0] = {
-        "input": output[0],
-    }
+    output[0] = TensorDict(input=output[0])
     return output
 
 
-   # TODO (nithinc): remove this hardcoding
+def dict_to_tensordict(input_dict):
+    """
+    Recursively converts a dictionary to a TensorDict.
+
+    Args:
+        input_dict: Dictionary that may contain nested dictionaries and tensors
+
+    Returns:
+        TensorDict: A TensorDict that mirrors the structure of the input dictionary
+    """
+    from tensordict import TensorDict
+
+    result = {}
+
+    for key, value in input_dict.items():
+        if isinstance(value, dict):
+            # Recursively convert nested dictionaries
+            result[key] = dict_to_tensordict(value)
+        else:
+            # Keep the value as is (should be a tensor or compatible type)
+            result[key] = value
+
+    return TensorDict(result)
+
+
+# TODO (nithinc): remove this hardcoding
 @functools.lru_cache(maxsize=100, typed=False)
 def get_sample_batch():
     with open(
@@ -148,27 +172,19 @@ def get_sample_batch():
     era_lon = sample_batch["assimilation"]["era5_x_current"][0]
     era_lat = sample_batch["assimilation"]["era5_x_current"][1]
     era_lonlat = sample_batch["assimilation"]["era5_lonlat_current"]
-    era_lon = era_lon.cuda()
-    era_lat = era_lat.cuda()
-    era_climatology = era_climatology.cuda()
-    era5_elev = era5_elev.cuda()
-    era_lonlat = era_lonlat.cuda()
     return era_lon, era_lat, era_climatology, era5_elev, era_lonlat
 
+
 def convert_to_aardvark_format(src: dict, trg: dict) -> tuple[dict, dict]:
-    src = src.cuda()
-    trg = trg.cuda()
     # TODO (nithinc): remove this hardcoding - and make sure it doesn't keep loading data
     era_lon, era_lat, era_climatology, era5_elev, era_lonlat = get_sample_batch()
     inputs = {}
     inputs["y_target"] = torch.empty(0)
 
-
     def hadisd_coords(src, var):
         return torch.stack(
             [src["hadisd"][var]["lon"], src["hadisd"][var]["lat"]], dim=1
         )
-
 
     """
     removed values
@@ -187,69 +203,88 @@ def convert_to_aardvark_format(src: dict, trg: dict) -> tuple[dict, dict]:
 
     y_context = torch.empty(0)  # Upstream prediction from processor - shape B,C,lon,lat
     inputs["downscaling"]["y_context"] = y_context
-    x_context = [era_lon, era_lat]  # tuple of lon x lat for ERA5 - this we can grab from the sample batch - each is 1 x coords
-    inputs["downscaling"]["x_context"] = x_context
-    aux_time = torch.empty(0) # TODO (nithinc): add aux times from gencast
+    x_context = [
+        era_lon,
+        era_lat,
+    ]  # tuple of lon x lat for ERA5 - this we can grab from the sample batch - each is 1 x coords
+    # inputs["downscaling"]["x_context"] = x_context
+    inputs["downscaling"]["x_context_lon"] = x_context[0]
+    inputs["downscaling"]["x_context_lat"] = x_context[1]
+    aux_time = torch.empty(0)  # TODO (nithinc): add aux times from gencast
     inputs["downscaling"]["aux_time"] = aux_time
     lt = torch.empty(0)  # shape B TODO (remove? its nan in the sample batch)
     inputs["downscaling"]["lt"] = lt
-
-
     #### ASSIMILATION
     inputs["assimilation"] = {}
+    for var in ["tas", "tds", "psl", "ws", "wd"]:
+        inputs["assimilation"][f"x_context_hadisd_current_{var}"] = hadisd_coords(src, var) 
 
-    x_context_hadisd_current = [hadisd_coords(src, var) for var in ["tas", "tds", "psl", "ws", "wd"]] # should be "tas", "tds", "psl", "u", "v"
-    inputs["assimilation"]["x_context_hadisd_current"] = x_context_hadisd_current
-
-    y_context_hadisd_current = [src['hadisd'][var]['observation'] for var in ["tas", "tds", "psl", "ws", "wd"]] # should be "tas", "tds", "psl", "u", "v"
-    inputs["assimilation"]["y_context_hadisd_current"] = y_context_hadisd_current
+    for var in ["tas", "tds", "psl", "ws", "wd"]:
+        inputs["assimilation"][f"y_context_hadisd_current_{var}"] = src["hadisd"][var]["observation"]
 
     climatology_current = era_climatology
     inputs["assimilation"]["climatology_current"] = climatology_current
 
-    sat_x_current = [src['gridsat']['lon'], src['gridsat']['lat']] # [batch['icoads']['lon'], batch['icoads']['lat']]
-    inputs["assimilation"]["sat_x_current"] = sat_x_current
+    sat_x_current = [
+        src["gridsat"]["lon"],
+        src["gridsat"]["lat"],
+    ]  # [batch['icoads']['lon'], batch['icoads']['lat']]
+    inputs["assimilation"]["sat_x_current_lon"] = sat_x_current[0]
+    inputs["assimilation"]["sat_x_current_lat"] = sat_x_current[1]
 
-    sat_current = src['gridsat']['observation'] # batch['gridsat']['observation']
-    sat_current  = sat_current.permute(0, 1, 3, 2)
+    sat_current = src["gridsat"]["observation"]  # batch['gridsat']['observation']
+    sat_current = sat_current.permute(0, 1, 3, 2)
     inputs["assimilation"]["sat_current"] = sat_current
 
-    icoads_x_current = [src['icoads']['lon'], src['icoads']['lat']] 
-    inputs["assimilation"]["icoads_x_current"] = icoads_x_current
+    icoads_x_current = [src["icoads"]["lon"], src["icoads"]["lat"]]
+    inputs["assimilation"]["icoads_x_current_lon"] = icoads_x_current[0]
+    inputs["assimilation"]["icoads_x_current_lat"] = icoads_x_current[1]
 
-    icoads_current = src['icoads']['observation'] 
+    icoads_current = src["icoads"]["observation"]
     inputs["assimilation"]["icoads_current"] = icoads_current
 
-    igra_x_current = [src['igra']['lon'], src['igra']['lat']] 
-    inputs["assimilation"]["igra_x_current"] = igra_x_current
+    igra_x_current = [src["igra"]["lon"], src["igra"]["lat"]]
+    inputs["assimilation"]["igra_x_current_lon"] = igra_x_current[0]
+    inputs["assimilation"]["igra_x_current_lat"] = igra_x_current[1]
 
-    igra_current = src['igra']['observation'] 
+    igra_current = src["igra"]["observation"]
     inputs["assimilation"]["igra_current"] = igra_current
 
-    amsua_current = src['amsua']['observation'].permute(0, 2, 3, 1) #  channel last format
+    amsua_current = src["amsua"]["observation"].permute(
+        0, 2, 3, 1
+    )  #  channel last format
     inputs["assimilation"]["amsua_current"] = amsua_current
 
-    amsua_x_current =[src['amsua']['lon'], src['amsua']['lat']] 
-    inputs["assimilation"]["amsua_x_current"] = amsua_x_current
+    amsua_x_current = [src["amsua"]["lon"], src["amsua"]["lat"]]
+    inputs["assimilation"]["amsua_x_current_lon"] = amsua_x_current[0]
+    inputs["assimilation"]["amsua_x_current_lat"] = amsua_x_current[1]
 
-    amsub_current = src['amsub']['observation'].permute(0, 2, 3, 1) #  channel last format
+    amsub_current = src["amsub"]["observation"].permute(
+        0, 2, 3, 1
+    )  #  channel last format
     amsub_current = amsub_current.permute(0, 2, 1, 3)
     inputs["assimilation"]["amsub_current"] = amsub_current
 
+    amsub_x_current = [src["amsub"]["lon"], src["amsub"]["lat"]]
+    inputs["assimilation"]["amsub_x_current_lon"] = amsub_x_current[0]
+    inputs["assimilation"]["amsub_x_current_lat"] = amsub_x_current[1]
 
-    amsub_x_current = [src['amsub']['lon'], src['amsub']['lat']] 
-    inputs["assimilation"]["amsub_x_current"] = amsub_x_current
-
-    iasi_current = src['iasi']['observation'].permute(0, 2, 3, 1) #  channel last format
+    iasi_current = src["iasi"]["observation"].permute(
+        0, 2, 3, 1
+    )  #  channel last format
     inputs["assimilation"]["iasi_current"] = iasi_current
 
-    iasi_x_current = [src['iasi']['lon'], src['iasi']['lat']] 
-    inputs["assimilation"]["iasi_x_current"] = iasi_x_current
+    iasi_x_current = [src["iasi"]["lon"], src["iasi"]["lat"]]
+    inputs["assimilation"]["iasi_x_current_lon"] = iasi_x_current[0]
+    inputs["assimilation"]["iasi_x_current_lat"] = iasi_x_current[1]
 
-    ascat_current = src['ascat']['observation'].permute(0, 2, 3, 1) #  channel last format
+    ascat_current = src["ascat"]["observation"].permute(
+        0, 2, 3, 1
+    )  #  channel last format
     inputs["assimilation"]["ascat_current"] = ascat_current
-    ascat_x_current = [src['ascat']['lon'], src['ascat']['lat']] 
-    inputs["assimilation"]["ascat_x_current"] = ascat_x_current
+    ascat_x_current = [src["ascat"]["lon"], src["ascat"]["lat"]]
+    inputs["assimilation"]["ascat_x_current_lon"] = ascat_x_current[0]
+    inputs["assimilation"]["ascat_x_current_lat"] = ascat_x_current[1]
 
     hirs_current = torch.empty(0)
     inputs["assimilation"]["hirs_current"] = hirs_current
@@ -267,38 +302,43 @@ def convert_to_aardvark_format(src: dict, trg: dict) -> tuple[dict, dict]:
     inputs["assimilation"]["y_target_current"] = y_target_current
 
     era5_x_current = [era_lon, era_lat]
-    inputs["assimilation"]["era5_x_current"] = era5_x_current
+    inputs["assimilation"]["era5_x_current_lon"] = era5_x_current[0]
+    inputs["assimilation"]["era5_x_current_lat"] = era5_x_current[1]
 
     era5_elev_current = era5_elev
     inputs["assimilation"]["era5_elev_current"] = era5_elev_current
 
-    era5_lonlat_current = era_lonlat # just the mesh grid of era5_x?
+    era5_lonlat_current = era_lonlat  # just the mesh grid of era5_x?
     inputs["assimilation"]["era5_lonlat_current"] = era5_lonlat_current
 
-    aux_time_current = torch.empty(0) # TODO (nithinc): add aux times from gencast
+    aux_time_current = torch.empty(0)  # TODO (nithinc): add aux times from gencast
     inputs["assimilation"]["aux_time_current"] = aux_time_current
 
-    lt = torch.empty(0) # TODO (remove? its nan in the sample batch)
+    lt = torch.empty(0)  # TODO (remove? its nan in the sample batch)
     inputs["assimilation"]["lt"] = lt
 
     y_target = torch.empty(0)
     inputs["assimilation"]["y_target"] = y_target
 
-
     ### FORECASTING
     inputs["forecasting"] = {}
-    y_context = torch.empty(0) # concat of the first 24 era5 vars + embeddings of the stations
-    inputs["forecasting"]["y_context"] = y_context # I think we can just populate this as needed
+    y_context = torch.empty(
+        0
+    )  # concat of the first 24 era5 vars + embeddings of the stations
+    inputs["forecasting"]["y_context"] = (
+        y_context  # I think we can just populate this as needed
+    )
     y_target = torch.empty(0)
     inputs["forecasting"]["y_target"] = y_target
-    lt = torch.empty(0) #?? Their sample data has this as 0 but the others as nan?
+    lt = torch.empty(0)  # ?? Their sample data has this as 0 but the others as nan?
     inputs["forecasting"]["lt"] = lt
 
-
     # actual target
-    target = trg['hadisd'][target_var]['observation']
+    target = trg["hadisd"][target_var]["observation"]
 
-
+    # standardize to float32
+    inputs = dict_to_tensordict(inputs).float() 
+    target = target.float()
     return inputs, target
 
 

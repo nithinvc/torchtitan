@@ -42,7 +42,7 @@ dataset_path = "/mnt/local_storage/weather/aardvark-weather/"
 mixed_precision_param = "float32"
 
 [parallelism]
-data_parallel_replicate_degree = 8 # TODO This is the DDP rank
+data_parallel_replicate_degree = 1 # TODO This is the DDP rank
 data_parallel_shard_degree = -1
 fsdp_reshard_after_forward = "default" # default / never / always
 tensor_parallel_degree = 1

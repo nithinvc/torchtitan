@@ -155,17 +155,12 @@ class ViT(nn.Module):
         self.head = nn.Sequential(*head_layers)
 
 
-        self.initialize_weights()
         if not self.per_var_embedding:
             self.mlp = MLP(in_channels=277, out_channels=256)
 
-        self._proj = None
-        # self.construct_proj()
-
-    def construct_proj(self):
         self._proj = nn.Linear(212, 277) # TODO (nithinc): remove this
 
-    def initialize_weights(self):
+    def init_weights(self):
         pos_embed = get_2d_sincos_pos_embed(
             self.pos_embed.shape[-1],
             int(self.img_size[0] / self.patch_size),
@@ -253,8 +248,7 @@ class ViT(nn.Module):
 
         else:
             x = x.float()
-            if self._proj:
-                x = self._proj(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+            x = self._proj(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
             x = self.mlp(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
             x = self.token_embeds[0](x)
 

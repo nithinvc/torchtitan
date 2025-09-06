@@ -15,7 +15,10 @@ from torchtitan.protocols.train_spec import ModelProtocol
 from torchtitan.experiments.weather.models.aardvark.model.conv_np import ConvCNPWeather
 
 import pickle as pkl
-from torchtitan.experiments.weather.models.aardvark.model.downscaling import ConvCNPWeatherOnToOff
+from torchtitan.experiments.weather.models.aardvark.model.downscaling import (
+    ConvCNPWeatherOnToOff,
+)
+
 
 @tensorclass
 class ForecastTask:
@@ -43,8 +46,8 @@ class DownscalingTask:
     def from_dict(cls, dict: Dict[str, Any]):
         return DownscalingTask(
             y_context=dict["y_context"],
-            x_context_lon=dict["x_context"][0],
-            x_context_lat=dict["x_context"][1],
+            x_context_lon=dict["x_context_lon"],
+            x_context_lat=dict["x_context_lat"],
             x_target=dict["x_target"],
             aux_time=dict["aux_time"],
             lt=dict["lt"],
@@ -82,10 +85,11 @@ class E2ETask:
             downscaling=DownscalingTask.from_dict(dict["downscaling"]),
         )
 
+
 def get_se_model(model_args: AardvarkModelArgs):
     # hard coded loading of se model
     model_path = "/mnt/local_storage/weather/aardvark-weather/trained_model/encoder/"
-    with open(model_path + 'config.pkl', "rb") as handle:
+    with open(model_path + "config.pkl", "rb") as handle:
         forecast_config = pkl.load(handle)
 
     model = ConvCNPWeather(
@@ -98,27 +102,32 @@ def get_se_model(model_args: AardvarkModelArgs):
         decoder=forecast_config["decoder"],
         mode=forecast_config["mode"],
         film=bool(0),
-        data_path='/home/ray/default/torchtitan/aardvark-weather-public/data/',
+        data_path="/home/ray/default/torchtitan/aardvark-weather-public/data/",
     )
 
+    return model
+
+
+def get_se_model_ckpt(model_args: AardvarkModelArgs):
+    model_path = "/mnt/local_storage/weather/aardvark-weather/trained_model/encoder/"
     best_epoch = np.argmin(np.load("{}/losses_0.npy".format(model_path)))
+
     state_dict = torch.load(
         "{}/epoch_{}".format(model_path, best_epoch),
         weights_only=False,
         map_location="cuda",
-    )["model_state_dict"]
+    )
+    state_dict = state_dict["model_state_dict"]
     state_dict = {k[7:]: v for k, v in zip(state_dict.keys(), state_dict.values())}
-    model.load_state_dict(state_dict)
-    model.decoder_lr.construct_proj()
-    model = model.to("cuda")
-    return model
-    
+    return state_dict
+
 
 def get_forecast_models(model_args: AardvarkModelArgs):
-    forecast_model_path = "/mnt/local_storage/weather/aardvark-weather/trained_model/processor/"
+    forecast_model_path = (
+        "/mnt/local_storage/weather/aardvark-weather/trained_model/processor/"
+    )
     models = []
     for lt in range(model_args.lead_time):
-        lead_time = lt + 1 
         with open(forecast_model_path + "/config.pkl", "rb") as handle:
             forecast_config = pkl.load(handle)
 
@@ -132,25 +141,35 @@ def get_forecast_models(model_args: AardvarkModelArgs):
             decoder=forecast_config["decoder"],
             mode=forecast_config["mode"],
             film=False,
-            data_path='/home/ray/default/torchtitan/aardvark-weather-public/data/',
+            data_path="/home/ray/default/torchtitan/aardvark-weather-public/data/",
         )
+        models.append(model)
+    return nn.ModuleList(models)
+
+
+def get_forecast_models_ckpt(model_args: AardvarkModelArgs):
+    forecast_model_path = (
+        "/mnt/local_storage/weather/aardvark-weather/trained_model/processor/"
+    )
+    ckpts = []
+    for lt in range(model_args.lead_time):
+        lead_time = lt + 1
         state_dict = torch.load(
             f"{forecast_model_path}/forecast_{lead_time}/epoch_0",
             weights_only=False,
             map_location="cuda",
         )["model_state_dict"]
         state_dict = {k[7:]: v for k, v in zip(state_dict.keys(), state_dict.values())}
-        model.load_state_dict(state_dict)
-        model = model.to("cuda")
-        models.append(model)
-    return nn.ModuleList(models)
+        ckpts.append(state_dict)
+    return ckpts
+
 
 def get_sf_model(model_args: AardvarkModelArgs):
     # hard coded loading of sf model
-    target_var = 'tas'
-    sf_model_path = "/mnt/local_storage/weather/aardvark-weather/trained_model/decoder/tas/"
+    target_var = "tas"
+    sf_model_path = f"/mnt/local_storage/weather/aardvark-weather/trained_model/decoder/{target_var}/"
     with open(sf_model_path + "config.pkl", "rb") as handle:
-            config = pkl.load(handle)
+        config = pkl.load(handle)
 
     model = ConvCNPWeatherOnToOff(
         in_channels=config["in_channels"],
@@ -161,8 +180,16 @@ def get_sf_model(model_args: AardvarkModelArgs):
         decoder=config["decoder"],
         mode=config["mode"],
         film=False,
-        data_path='/home/ray/default/torchtitan/aardvark-weather-public/data/',
+        data_path="/home/ray/default/torchtitan/aardvark-weather-public/data/",
     )
+    return model
+
+
+def get_sf_model_ckpt(model_args: AardvarkModelArgs):
+    # hard coded loading of sf model
+    target_var = "tas"
+
+    sf_model_path = f"/mnt/local_storage/weather/aardvark-weather/trained_model/decoder/{target_var}/"
 
     best_epoch = np.argmin(
         np.load("{}/lt_{}/losses_0.npy".format(sf_model_path, model_args.lead_time))
@@ -174,9 +201,7 @@ def get_sf_model(model_args: AardvarkModelArgs):
     )
     state_dict = full_state_dict["model_state_dict"]
     state_dict = {k[7:]: v for k, v in zip(state_dict.keys(), state_dict.values())}
-    model.load_state_dict(state_dict)
-    model = model.to("cuda")
-    return model
+    return state_dict
 
 
 class AardvarkE2E(nn.Module, ModelProtocol):
@@ -206,8 +231,23 @@ class AardvarkE2E(nn.Module, ModelProtocol):
 
     def init_weights(self, buffer_device: torch.device | None = None) -> None:
         """Initialize model weights."""
-        pass # Do we need this for aardvark??
+        self.se_model.init_weights()
+        self.se_model.load_state_dict(get_se_model_ckpt(self.model_args), strict=False)
+        sf_state_dicts = get_sf_model_ckpt(self.model_args)
+        for i, model in enumerate(self.forecast_models):
+            model.init_weights()
+            model.load_state_dict(
+                get_forecast_models_ckpt(self.model_args)[i], strict=False
+            )
+        self.sf_model.init_weights()
+        self.sf_model.load_state_dict(sf_state_dicts, strict=False)
 
+        # normalization weights
+        normalization = self._get_normalization()
+        self.forecast_input_means = normalization["input_mean"].cuda()
+        self.forecast_input_stds = normalization["input_std"].cuda()
+        self.forecast_pred_diff_means = normalization["pred_diff_mean"].cuda()
+        self.forecast_pred_diff_stds = normalization["pred_diff_std"].cuda()
 
     def _build(
         self,
@@ -218,22 +258,23 @@ class AardvarkE2E(nn.Module, ModelProtocol):
         overwrite_channels: int = 24,
         base_context_exclude_tail: int = 11,
     ):
-
         if se_model is None:
             se_model = get_se_model(self.model_args)
 
         if forecast_models is None:
             forecast_models = get_forecast_models(self.model_args)
-        
+
         if sf_model is None:
             sf_model = get_sf_model(self.model_args)
-        
+
         lead_time = self.model_args.lead_time
         return_gridded = self.model_args.return_gridded
         normalization = self._get_normalization()
 
         if len(forecast_models) != lead_time:
-            raise ValueError(f"Expected {lead_time} forecast models, got {len(forecast_models)}")
+            raise ValueError(
+                f"Expected {lead_time} forecast models, got {len(forecast_models)}"
+            )
 
         self.se_model = se_model
         self.forecast_models = nn.ModuleList(list(forecast_models))
@@ -257,13 +298,29 @@ class AardvarkE2E(nn.Module, ModelProtocol):
         self.register_buffer("forecast_pred_diff_stds", pds, persistent=False)
 
     def _get_normalization(self):
-        # TODO (nithinc): will break with hardcoded paths 
-        
+        # TODO (nithinc): will break with hardcoded paths
+
         return {
-            "input_mean": torch.from_numpy(np.load('/home/ray/default/torchtitan/aardvark-weather-public/data/norm_factors/mean_4u_1.npy')),
-            "input_std": torch.from_numpy(np.load('/home/ray/default/torchtitan/aardvark-weather-public/data/norm_factors/std_4u_1.npy')),
-            "pred_diff_mean": torch.from_numpy(np.load('/home/ray/default/torchtitan/aardvark-weather-public/data/norm_factors/mean_diff_4u_1.npy')),
-            "pred_diff_std": torch.from_numpy(np.load('/home/ray/default/torchtitan/aardvark-weather-public/data/norm_factors/std_diff_4u_1.npy')),
+            "input_mean": torch.from_numpy(
+                np.load(
+                    "/home/ray/default/torchtitan/aardvark-weather-public/data/norm_factors/mean_4u_1.npy"
+                )
+            ),
+            "input_std": torch.from_numpy(
+                np.load(
+                    "/home/ray/default/torchtitan/aardvark-weather-public/data/norm_factors/std_4u_1.npy"
+                )
+            ),
+            "pred_diff_mean": torch.from_numpy(
+                np.load(
+                    "/home/ray/default/torchtitan/aardvark-weather-public/data/norm_factors/mean_diff_4u_1.npy"
+                )
+            ),
+            "pred_diff_std": torch.from_numpy(
+                np.load(
+                    "/home/ray/default/torchtitan/aardvark-weather-public/data/norm_factors/std_diff_4u_1.npy"
+                )
+            ),
         }
 
     def _process_se_output(
@@ -291,7 +348,9 @@ class AardvarkE2E(nn.Module, ModelProtocol):
             )
 
         updated = forecast_y_context.clone()
-        updated[:, : self.overwrite_channels, ...] = se_out_chw[:, : self.overwrite_channels, ...]
+        updated[:, : self.overwrite_channels, ...] = se_out_chw[
+            :, : self.overwrite_channels, ...
+        ]
 
         # Initial state for return: de-normalised later, channels-last (B, H, W, C)
         initial_state = to_channels_last_4d(se_out)
@@ -321,17 +380,14 @@ class AardvarkE2E(nn.Module, ModelProtocol):
         base_context = to_channels_last_4d(base_context)  # (B, H, W, C')
 
         # Un-normalise base context
-        base_context = base_context.cuda()
-        self.forecast_input_stds = self.forecast_input_stds.cuda()
-        self.forecast_input_means = self.forecast_input_means.cuda()
-        base_context_unnorm = base_context * self.forecast_input_stds + self.forecast_input_means
+        base_context_unnorm = (
+            base_context * self.forecast_input_stds + self.forecast_input_means
+        )
 
         # Processor produces per-channel differences; un-normalise predicted diffs
         # processor_out is already channels last format
         # x = to_channels_last_4d(processor_out)
-        x = processor_out.cuda()
-        self.forecast_pred_diff_means = self.forecast_pred_diff_means.cuda()
-        self.forecast_pred_diff_stds = self.forecast_pred_diff_stds.cuda()
+        x = processor_out.to(forecast_y_context.device)
         x = self.forecast_pred_diff_means + x * self.forecast_pred_diff_stds
 
         # Compute absolute forecast on channels-last
@@ -339,28 +395,42 @@ class AardvarkE2E(nn.Module, ModelProtocol):
         forecast_grid = x + base_context_unnorm
 
         # Re-normalise for next steps
-        x_norm = (forecast_grid - self.forecast_input_means) / self.forecast_input_stds  # channels-last
+        x_norm = (
+            forecast_grid - self.forecast_input_means
+        ) / self.forecast_input_stds  # channels-last
 
         # Update downscaling context first N channels with normalised forecast
         # NOTE (nithinc): I think there might be a permute missing in this logic? But I'm not sure what's actually happening
         x_norm_chw = to_channels_first_4d(x_norm)
-        ds_updated = torch.zeros((x.shape[0], 36, 240, 121)).cuda()
-        ds_updated[:, : self.overwrite_channels, ...] = x_norm_chw[:, : self.overwrite_channels, ...]
+        ds_updated = torch.zeros((x.shape[0], 36, 240, 121)).to(
+            forecast_y_context.device
+        )
+        ds_updated[:, : self.overwrite_channels, ...] = x_norm_chw[
+            :, : self.overwrite_channels, ...
+        ]
 
         # Roll forecast context: prepend new normalised channels, drop first N
-        forecast_y_context = forecast_y_context.cuda()
-        fc_updated = torch.cat([x_norm_chw, forecast_y_context[:, self.overwrite_channels :, ...]], dim=1)
+        forecast_y_context = forecast_y_context
+        fc_updated = torch.cat(
+            [x_norm_chw, forecast_y_context[:, self.overwrite_channels :, ...]], dim=1
+        )
 
         return fc_updated, ds_updated, forecast_grid
 
-    def forward(self, task: E2ETask):
+    def forward(self, original_task: E2ETask):
         # 1) Encode assimilation inputs
-        task = E2ETask.from_dict(task)
+        task = E2ETask.from_dict(original_task)
         se_out = self.se_model(task.assimilation, film_index=None)
 
         # 2) Seed forecast y_context with encoder output (non-mutating)
-        task.forecast.y_context = torch.zeros((se_out.shape[0], 35, 240, 121)).float()
-        forecast_y_context, initial_state_for_return = self._process_se_output(task.forecast.y_context, se_out)
+        task.forecast.y_context = (
+            torch.zeros((se_out.shape[0], 35, 240, 121))
+            .float()
+            .to(original_task.device)
+        )
+        forecast_y_context, initial_state_for_return = self._process_se_output(
+            task.forecast.y_context, se_out
+        )
 
         # Prepare a working downscaling y_context copy (non-mutating)
         downscaling_y_context = task.downscaling.y_context.clone()
@@ -370,14 +440,19 @@ class AardvarkE2E(nn.Module, ModelProtocol):
         for lt in range(self.lead_time):
             proc_in = {"y_context": forecast_y_context, "lt": task.forecast.lt}
             proc_out = self.forecast_models[lt](proc_in, film_index=None)
-            forecast_y_context, downscaling_y_context, last_forecast_grid = self._process_forecast_output(
-                forecast_y_context, downscaling_y_context, proc_out
+            forecast_y_context, downscaling_y_context, last_forecast_grid = (
+                self._process_forecast_output(
+                    forecast_y_context, downscaling_y_context, proc_out
+                )
             )
 
         # 4) Downscaling to station predictions
         ds_task_input = {
             "y_context": downscaling_y_context,
-            "x_context": [task.downscaling.x_context_lon, task.downscaling.x_context_lat],
+            "x_context": [
+                task.downscaling.x_context_lon,
+                task.downscaling.x_context_lat,
+            ],
             "x_target": task.downscaling.x_target,
             "aux_time": task.downscaling.aux_time,
             "lt": task.downscaling.lt,
@@ -388,7 +463,10 @@ class AardvarkE2E(nn.Module, ModelProtocol):
             # TODO (nithinc): potential shape bug?
             # B, W, C, H -> B, H, W, C
             initial_state_for_return = initial_state_for_return.permute(0, 3, 1, 2)
-            initial_state_grid = initial_state_for_return * self.forecast_input_stds + self.forecast_input_means
+            initial_state_grid = (
+                initial_state_for_return * self.forecast_input_stds
+                + self.forecast_input_means
+            )
             return station_preds, last_forecast_grid, initial_state_grid
 
         return station_preds

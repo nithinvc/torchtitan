@@ -104,20 +104,19 @@ class ConvCNPWeatherOnToOff(nn.Module):
             h_channels=64,
             h_layers=2,
         )
-        self.proj = None
+        self.proj = nn.Linear(27, 33)
 
+    def init_weights(self):
+        nn.init.trunc_normal_(self.proj.weight, mean=0.0, std=0.02)
+        nn.init.constant_(self.proj.bias, 0.0)
 
-    def proj1(self, x):
-        if self.proj is None:
-            self.proj = nn.Linear(27, 33).cuda().float()
-        return self.proj(x.float())
 
     def forward(self, task, film_index):
         x = task["y_context"]
         batch_size = x.shape[0]
 
         # UNet backbone
-        lt = torch.zeros((batch_size, 1)).cuda()
+        lt = torch.zeros((batch_size, 1)).to(x.device)
         x = self.decoder_lr(x, film_index=lt)
 
         # Transform to station predictions with setconv
@@ -153,7 +152,7 @@ class ConvCNPWeatherOnToOff(nn.Module):
         assert x.shape[1] == num_stations
 
 
-        x = self.proj1(x)
+        x = self.proj(x)
 
         tmp = self.mlp(x)
         assert list(tmp.shape) == [batch_size, num_stations, 1]

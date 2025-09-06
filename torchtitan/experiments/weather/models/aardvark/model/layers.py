@@ -10,20 +10,24 @@ class ConvDeepSet(nn.Module):
 
     def __init__(self, init_ls: float, mode: str, device: str, density_channel: bool = True):
         super().__init__()
+        self._init_ls_value = init_ls
         self.init_ls = torch.nn.Parameter(torch.tensor([init_ls]))
         self.mode = mode
         self.density_channel = density_channel
-        self.init_ls.requires_grad = True
         self.device = device
 
+    def init_weights(self):
+        nn.init.constant_(self.init_ls, self._init_ls_value)
+        self.init_ls.requires_grad = True
+
     def compute_weights(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
-        dists2 = self.pw_dists2(x1.unsqueeze(-1), x2.unsqueeze(-1)).cuda()
-        return torch.exp((-0.5 * dists2) / (self.init_ls.cuda()).pow(2))
+        dists2 = self.pw_dists2(x1.unsqueeze(-1), x2.unsqueeze(-1))
+        return torch.exp((-0.5 * dists2) / (self.init_ls).pow(2))
 
     def pw_dists2(self, a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-        norms_a = torch.sum(a.pow(2), dim=-1)[..., :, None].cuda().float()
-        norms_b = torch.sum(b.pow(2), dim=-1)[..., None, :].cuda().float()
-        return norms_a + norms_b - 2 * torch.matmul(a.float().cuda(), b.permute(0, 2, 1).float().cuda())
+        norms_a = torch.sum(a.pow(2), dim=-1)[..., :, None].float()
+        norms_b = torch.sum(b.pow(2), dim=-1)[..., None, :].float()
+        return norms_a + norms_b - 2 * torch.matmul(a.float(), b.permute(0, 2, 1).float())
 
     def forward(self, x_in, wt: torch.Tensor, x_out):
         # TODO (nithinc): shouldn't this be part of dataloading? Eventually we should move it out?

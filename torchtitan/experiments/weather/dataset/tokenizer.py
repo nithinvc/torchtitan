@@ -10,9 +10,6 @@ class WeatherTokenizer(BaseTokenizer):
 
     @override
     def encode(self, *args, **kwargs) -> list[int]:
-        import ipdb
-
-        ipdb.set_trace()
         return [0]
 
     @override
