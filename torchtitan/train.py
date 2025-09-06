@@ -12,6 +12,7 @@ from typing import Any, Generator, Iterable, Optional
 
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
+from tensordict import TensorDict
 
 import torchtitan.protocols.train_spec as train_spec_module
 from torchtitan.components.checkpoint import CheckpointManager
@@ -258,7 +259,6 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         else:
             # apply PT-D Tensor Parallel, activation checkpointing, torch.compile, Data Parallel
             model = self.train_spec.parallelize_fn(model, parallel_dims, job_config)
-
             model.to_empty(device=init_device)
             with torch.no_grad():
                 model.init_weights(buffer_device=buffer_device)
@@ -397,8 +397,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
             # Move tensors to the appropriate device
             for k, v in input_dict.items():
-                if isinstance(v, torch.Tensor):
-                    input_dict[k] = v.to(device_type)
+                if isinstance(v, torch.Tensor) or isinstance(v, TensorDict):
+                    input_dict[k] = v.to(device_type) # type: ignore
             labels = labels.to(device_type)
 
             yield input_dict, labels
