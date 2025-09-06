@@ -5,8 +5,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-set -ex
-
+# set -ex
+git apply torch-2.8.0.patch
 # use envs as local overwrites for convenience
 # e.g.
 # LOG_RANK=0,1 NGPU=4 ./run_train.sh
@@ -21,3 +21,5 @@ PYTORCH_ALLOC_CONF="expandable_segments:True" \
 TORCHFT_LIGHTHOUSE=${TORCHFT_LIGHTHOUSE} \
 torchrun --nproc_per_node=${NGPU} --rdzv_backend c10d --rdzv_endpoint="localhost:0" \
 -m ${TRAIN_FILE} --job.config_file ${CONFIG_FILE} "$@"
+
+git apply -R torch-2.8.0.patch
