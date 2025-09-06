@@ -15,7 +15,7 @@ log_freq = 1
 disable_color_printing = false
 enable_tensorboard = false
 save_tb_folder = "tb"
-enable_wandb = false
+enable_wandb = true
 
 [model]
 name = "aardvark-weather"
@@ -36,7 +36,7 @@ min_lr_factor = 0.0
 local_batch_size = 8
 seq_len = 2048 # TOD0 
 max_norm = 1.0  # grad norm clipping
-steps = 10
+steps = 100000
 dataset = "aardvark-weather"  
 dataset_path = "/mnt/local_storage/weather/aardvark-weather/"
 mixed_precision_param = "float32"
