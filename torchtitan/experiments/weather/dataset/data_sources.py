@@ -14,7 +14,6 @@ class ObservationData:
     lon: torch.Tensor
     lat: torch.Tensor
 
-
     def __getitem__(self, key: str) -> torch.Tensor:
         if key == "observation":
             return self.observation
@@ -31,31 +30,30 @@ def convert_field_to_tensordict(ds: xr.Dataset) -> ObservationData:
     lon = None
     lat = None
 
-    if 'longitude' in ds:
+    if "longitude" in ds:
         lon = ds.longitude.values
-    if 'latitude' in ds:
+    if "latitude" in ds:
         lat = ds.latitude.values
-    if 'lon' in ds and lon is None:
+    if "lon" in ds and lon is None:
         lon = ds.lon.values
-    if 'lat' in ds and lat is None:
+    if "lat" in ds and lat is None:
         lat = ds.lat.values
 
     variables = list(ds.data_vars)
     # remove lon and lat from variables
-    if 'lon' in variables:
+    if "lon" in variables:
         variables.remove("lon")
-    if 'lat' in variables:
+    if "lat" in variables:
         variables.remove("lat")
 
-    if 'longitude' in variables:
+    if "longitude" in variables:
         variables.remove("longitude")
-    if 'latitude' in variables:
+    if "latitude" in variables:
         variables.remove("latitude")
 
     obs = [ds[k].values for k in variables]
     obs = np.stack(obs, axis=0)
     return ObservationData(observation=obs, lon=lon, lat=lat)
-
 
 
 def convert_hadisd_to_tensordict(ds: xr.Dataset) -> tensordict.TensorDict:

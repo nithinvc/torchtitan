@@ -28,7 +28,12 @@ class DummyProcessor(nn.Module):
     def forward(self, task, film_index=None):
         y = task["y_context"]
         b, c, h, w = y.shape
-        return torch.full((b, h, w, self.out_channels), self.delta_value, dtype=y.dtype, device=y.device)
+        return torch.full(
+            (b, h, w, self.out_channels),
+            self.delta_value,
+            dtype=y.dtype,
+            device=y.device,
+        )
 
 
 class DummyDecoder(nn.Module):
@@ -107,7 +112,9 @@ class TestAardvarkE2E(unittest.TestCase):
 
         # Build stubs
         self.encoder = DummyEncoder()
-        self.forecasters = [DummyProcessor(delta_value=0.1, out_channels=self.C) for _ in range(3)]
+        self.forecasters = [
+            DummyProcessor(delta_value=0.1, out_channels=self.C) for _ in range(3)
+        ]
         self.decoder = DummyDecoder()
 
         self.model = AardvarkE2E(
@@ -163,7 +170,10 @@ class TestAardvarkE2E(unittest.TestCase):
 
         # Reference computation using same stubs and math
         # Processors_out are channel-last diffs
-        processors_out = [torch.full((self.B, self.H, self.W, self.C), 0.1) for _ in range(len(self.forecasters))]
+        processors_out = [
+            torch.full((self.B, self.H, self.W, self.C), 0.1)
+            for _ in range(len(self.forecasters))
+        ]
 
         fc, ds, last_forecast, initial_state = ref_process(
             self.overwrite_channels,
@@ -181,7 +191,10 @@ class TestAardvarkE2E(unittest.TestCase):
         # Decoder on reference
         ref_task = {
             "y_context": ds,
-            "x_context": [self.downscaling.x_context_lon, self.downscaling.x_context_lat],
+            "x_context": [
+                self.downscaling.x_context_lon,
+                self.downscaling.x_context_lat,
+            ],
             "x_target": self.downscaling.x_target,
             "alt_target": self.downscaling.alt_target,
             "aux_time": self.downscaling.aux_time,

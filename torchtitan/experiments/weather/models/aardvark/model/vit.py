@@ -66,10 +66,13 @@ def interpolate_pos_embed(model, checkpoint_model, new_size=(64, 128)):
         new_size = (new_size[0] // patch_size, new_size[1] // patch_size)
 
         if orig_size[0] != new_size[0]:
-            print("Interpolate PEs from %dx%d to %dx%d" % (orig_size[0], orig_size[1], new_size[0], new_size[1]))
-            pos_tokens = pos_embed_checkpoint.reshape(-1, orig_size[0], orig_size[1], embedding_size).permute(
-                0, 3, 1, 2
+            print(
+                "Interpolate PEs from %dx%d to %dx%d"
+                % (orig_size[0], orig_size[1], new_size[0], new_size[1])
             )
+            pos_tokens = pos_embed_checkpoint.reshape(
+                -1, orig_size[0], orig_size[1], embedding_size
+            ).permute(0, 3, 1, 2)
             new_pos_tokens = torch.nn.functional.interpolate(
                 pos_tokens,
                 size=(new_size[0], new_size[1]),
@@ -85,7 +88,9 @@ def interpolate_channel_embed(checkpoint_model, new_len):
         channel_embed_checkpoint = checkpoint_model["net.channel_embed"]
         old_len = channel_embed_checkpoint.shape[1]
         if new_len <= old_len:
-            checkpoint_model["net.channel_embed"] = channel_embed_checkpoint[:, :new_len]
+            checkpoint_model["net.channel_embed"] = channel_embed_checkpoint[
+                :, :new_len
+            ]
 
 
 class ViT(nn.Module):
@@ -115,17 +120,26 @@ class ViT(nn.Module):
 
         if self.per_var_embedding:
             self.token_embeds = nn.ModuleList(
-                [PatchEmbed(img_size, patch_size, 1, embed_dim) for i in range(len(default_vars))]
+                [
+                    PatchEmbed(img_size, patch_size, 1, embed_dim)
+                    for i in range(len(default_vars))
+                ]
             )
         else:
-            self.token_embeds = nn.ModuleList([PatchEmbed(img_size, patch_size, in_channels, embed_dim)])
+            self.token_embeds = nn.ModuleList(
+                [PatchEmbed(img_size, patch_size, in_channels, embed_dim)]
+            )
         self.num_patches: int = int(self.token_embeds[0].num_patches)  # type: ignore[arg-type]
 
         self.var_embed, self.var_map = self.create_var_embedding(embed_dim)
-        self.var_query = nn.Parameter(torch.zeros(1, 1, int(embed_dim)), requires_grad=True)
+        self.var_query = nn.Parameter(
+            torch.zeros(1, 1, int(embed_dim)), requires_grad=True
+        )
         self.var_agg = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
 
-        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, embed_dim), requires_grad=True)
+        self.pos_embed = nn.Parameter(
+            torch.zeros(1, self.num_patches, embed_dim), requires_grad=True
+        )
         self.lead_time_embed = nn.Linear(1, embed_dim)
 
         self.out_dim = out_channels
@@ -154,11 +168,10 @@ class ViT(nn.Module):
         head_layers.append(nn.Linear(embed_dim, self.out_dim * patch_size**2))
         self.head = nn.Sequential(*head_layers)
 
-
         if not self.per_var_embedding:
             self.mlp = MLP(in_channels=277, out_channels=256)
 
-        self._proj = nn.Linear(212, 277) # TODO (nithinc): remove this
+        self._proj = nn.Linear(212, 277)  # TODO (nithinc): remove this
 
     def init_weights(self):
         pos_embed = get_2d_sincos_pos_embed(
@@ -169,7 +182,9 @@ class ViT(nn.Module):
         )
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
-        var_embed = get_1d_sincos_pos_embed_from_grid(self.var_embed.shape[-1], np.arange(len(self.default_vars)))
+        var_embed = get_1d_sincos_pos_embed_from_grid(
+            self.var_embed.shape[-1], np.arange(len(self.default_vars))
+        )
         self.var_embed.data.copy_(torch.from_numpy(var_embed).float().unsqueeze(0))
 
         for i in range(len(self.token_embeds)):
@@ -188,7 +203,9 @@ class ViT(nn.Module):
             nn.init.constant_(m.weight, 1.0)
 
     def create_var_embedding(self, dim):
-        var_embed = nn.Parameter(torch.zeros(1, len(self.default_vars), dim), requires_grad=True)
+        var_embed = nn.Parameter(
+            torch.zeros(1, len(self.default_vars), dim), requires_grad=True
+        )
         var_map = {}
         idx = 0
         for var in self.default_vars:

@@ -27,7 +27,9 @@ state_dict_adapter = None
 model_configs: dict[str, Any] = {}
 
 model_configs = {
-    "llama3-debug": SimpleLlama3ModelArgs(dim=256, n_layers=6, n_heads=16, vocab_size=2000, rope_theta=500000),
+    "llama3-debug": SimpleLlama3ModelArgs(
+        dim=256, n_layers=6, n_heads=16, vocab_size=2000, rope_theta=500000
+    ),
 }
 
 register_train_spec(

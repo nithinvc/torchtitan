@@ -7,7 +7,9 @@ import torch.nn as nn
 from torchtitan.experiments.weather.models.aardvark.model.layers import ConvDeepSet
 from torchtitan.experiments.weather.models.aardvark.model.unet_wrap_padding import Unet
 from torchtitan.experiments.weather.models.aardvark.model.vit import ViT
-from torchtitan.experiments.weather.models.aardvark.model.architectures import DownscalingMLP
+from torchtitan.experiments.weather.models.aardvark.model.architectures import (
+    DownscalingMLP,
+)
 
 hadisd_publisher_shifts = {
     "tas": 273.15,
@@ -74,11 +76,23 @@ class ConvCNPWeatherOnToOff(nn.Module):
         self.film = film
 
         # Load lon-lat of internal discretisation
-        self.era5_x = torch.from_numpy(np.load(data_path + "grid_lon_lat/era5_x_{}.npy".format(res))).float() / 360
-        self.era5_y = torch.from_numpy(np.load(data_path + "grid_lon_lat/era5_y_{}.npy".format(res))).float() / 360
+        self.era5_x = (
+            torch.from_numpy(
+                np.load(data_path + "grid_lon_lat/era5_x_{}.npy".format(res))
+            ).float()
+            / 360
+        )
+        self.era5_y = (
+            torch.from_numpy(
+                np.load(data_path + "grid_lon_lat/era5_y_{}.npy".format(res))
+            ).float()
+            / 360
+        )
 
         # Setup setconv
-        self.sc_out = ConvDeepSet(0.001, "OnToOff", density_channel=False, device=self.device)
+        self.sc_out = ConvDeepSet(
+            0.001, "OnToOff", density_channel=False, device=self.device
+        )
 
         if self.mode not in ["downscaling", "end_to_end"]:
             unet_out_channels = out_channels
@@ -109,7 +123,6 @@ class ConvCNPWeatherOnToOff(nn.Module):
     def init_weights(self):
         nn.init.trunc_normal_(self.proj.weight, mean=0.0, std=0.02)
         nn.init.constant_(self.proj.bias, 0.0)
-
 
     def forward(self, task, film_index):
         x = task["y_context"]
@@ -150,7 +163,6 @@ class ConvCNPWeatherOnToOff(nn.Module):
         x = torch.cat([x, x_target, aux_time], dim=1).permute(0, 2, 1)
         assert x.shape[0] == batch_size
         assert x.shape[1] == num_stations
-
 
         x = self.proj(x)
 

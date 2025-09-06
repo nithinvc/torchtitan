@@ -48,38 +48,79 @@ class ConvCNPWeather(nn.Module):
         N_HADISD_VARS = 5
 
         # Load internal grid longitude-latitude locations
-        self.era5_x = torch.from_numpy(np.load(self.data_path + "grid_lon_lat/era5_x_{}.npy".format(res))).float() / 360
-        self.era5_y = torch.from_numpy(np.load(self.data_path + "grid_lon_lat/era5_y_{}.npy".format(res))).float() / 360
+        self.era5_x = (
+            torch.from_numpy(
+                np.load(self.data_path + "grid_lon_lat/era5_x_{}.npy".format(res))
+            ).float()
+            / 360
+        )
+        self.era5_y = (
+            torch.from_numpy(
+                np.load(self.data_path + "grid_lon_lat/era5_y_{}.npy".format(res))
+            ).float()
+            / 360
+        )
 
         int_grid_1 = torch.linspace(0, 360, 240, dtype=float) / 360
         int_grid_2 = torch.linspace(-90, 90, 121, dtype=float) / 360
-        self.int_grid_1 = self.register_buffer("int_grid_1", int_grid_1, persistent=False)
-        self.int_grid_2 = self.register_buffer("int_grid_2", int_grid_2, persistent=False)
+        self.int_grid_1 = self.register_buffer(
+            "int_grid_1", int_grid_1, persistent=False
+        )
+        self.int_grid_2 = self.register_buffer(
+            "int_grid_2", int_grid_2, persistent=False
+        )
 
         # Create input setconvs for each data modality
-        self.ascat_setconvs = ConvDeepSet(0.001, "OnToOn", density_channel=True, device=self.device)
-        self.amsua_setconvs = nn.ModuleList([
-            ConvDeepSet(0.001, "OnToOn", density_channel=True, device=self.device) for _ in range(13)
-        ])
-        self.amsub_setconvs = nn.ModuleList([
-            ConvDeepSet(0.001, "OnToOn", density_channel=True, device=self.device) for _ in range(12)
-        ])
-        self.hirs_setconvs = nn.ModuleList([ConvDeepSet(0.001, "OnToOn", density_channel=True, device=self.device) for _ in range(26)])
+        self.ascat_setconvs = ConvDeepSet(
+            0.001, "OnToOn", density_channel=True, device=self.device
+        )
+        self.amsua_setconvs = nn.ModuleList(
+            [
+                ConvDeepSet(0.001, "OnToOn", density_channel=True, device=self.device)
+                for _ in range(13)
+            ]
+        )
+        self.amsub_setconvs = nn.ModuleList(
+            [
+                ConvDeepSet(0.001, "OnToOn", density_channel=True, device=self.device)
+                for _ in range(12)
+            ]
+        )
+        self.hirs_setconvs = nn.ModuleList(
+            [
+                ConvDeepSet(0.001, "OnToOn", density_channel=True, device=self.device)
+                for _ in range(26)
+            ]
+        )
 
-        self.sat_setconvs = nn.ModuleList([
-            ConvDeepSet(0.001, "OnToOn", density_channel=True, device=self.device) for _ in range(N_SAT_VARS)
-        ])
-        self.hadisd_setconvs = nn.ModuleList([
-            ConvDeepSet(0.001, "OffToOn", density_channel=True, device=self.device) for _ in range(N_HADISD_VARS)
-        ])
-        self.icoads_setconvs = nn.ModuleList([
-            ConvDeepSet(0.001, "OffToOn", density_channel=True, device=self.device) for _ in range(N_ICOADS_VARS)
-        ])
-        self.igra_setconvs = nn.ModuleList([
-            ConvDeepSet(0.001, "OffToOn", density_channel=True, device=self.device) for _ in range(24)
-        ])
+        self.sat_setconvs = nn.ModuleList(
+            [
+                ConvDeepSet(0.001, "OnToOn", density_channel=True, device=self.device)
+                for _ in range(N_SAT_VARS)
+            ]
+        )
+        self.hadisd_setconvs = nn.ModuleList(
+            [
+                ConvDeepSet(0.001, "OffToOn", density_channel=True, device=self.device)
+                for _ in range(N_HADISD_VARS)
+            ]
+        )
+        self.icoads_setconvs = nn.ModuleList(
+            [
+                ConvDeepSet(0.001, "OffToOn", density_channel=True, device=self.device)
+                for _ in range(N_ICOADS_VARS)
+            ]
+        )
+        self.igra_setconvs = nn.ModuleList(
+            [
+                ConvDeepSet(0.001, "OffToOn", density_channel=True, device=self.device)
+                for _ in range(24)
+            ]
+        )
 
-        self.sc_out = ConvDeepSet(0.001, "OnToOff", density_channel=False, device=self.device)
+        self.sc_out = ConvDeepSet(
+            0.001, "OnToOff", density_channel=False, device=self.device
+        )
 
         # Instantiate the decoder. Here decoder refers to decoder in a convCNP (i.e the ViT backbone)
         if self.decoder == "vit":
@@ -144,9 +185,11 @@ class ConvCNPWeather(nn.Module):
 
         def _get_var(task, prefix, var):
             x_context = task[f"x_context_hadisd_{prefix}_{var}"]
-            return [x_context[:, 0, :] , x_context[:, 1, :]], task[f"y_context_hadisd_{prefix}_{var}"].unsqueeze(1)
+            return [x_context[:, 0, :], x_context[:, 1, :]], task[
+                f"y_context_hadisd_{prefix}_{var}"
+            ].unsqueeze(1)
 
-        for i,var in enumerate(["tas", "tds", "psl", "ws"]):
+        for i, var in enumerate(["tas", "tds", "psl", "ws"]):
             x_in, wt = _get_var(task, prefix, var)
             encodings.append(
                 self.hadisd_setconvs[i](
@@ -164,7 +207,10 @@ class ConvCNPWeather(nn.Module):
         """
 
         encodings = []
-        x_in = [task["sat_x_{}_lon".format(prefix)], task["sat_x_{}_lat".format(prefix)]]
+        x_in = [
+            task["sat_x_{}_lon".format(prefix)],
+            task["sat_x_{}_lat".format(prefix)],
+        ]
         for channel in range(task["sat_{}".format(prefix)].shape[1]):
             encodings.append(
                 self.sat_setconvs[channel](
@@ -182,7 +228,10 @@ class ConvCNPWeather(nn.Module):
         """
 
         encodings = []
-        x_in = [task["icoads_x_{}_lon".format(prefix)], task["icoads_x_{}_lat".format(prefix)]]
+        x_in = [
+            task["icoads_x_{}_lon".format(prefix)],
+            task["icoads_x_{}_lat".format(prefix)],
+        ]
         for channel in range(5):
             encodings.append(
                 self.icoads_setconvs[channel](
@@ -203,12 +252,17 @@ class ConvCNPWeather(nn.Module):
         encodings = []
         task["amsua_{}".format(prefix)][..., -1] = np.nan
         task["amsua_{}".format(prefix)][task["amsua_{}".format(prefix)] == 0] = np.nan
-        x_in = [task["amsua_x_{}_lon".format(prefix)], task["amsua_x_{}_lat".format(prefix)]]
+        x_in = [
+            task["amsua_x_{}_lon".format(prefix)],
+            task["amsua_x_{}_lat".format(prefix)],
+        ]
         for i in range(13):
             encodings.append(
                 self.amsua_setconvs[i](
                     x_in=x_in,
-                    wt=task["amsua_{}".format(prefix)].permute(0, 3, 2, 1)[:, i : i + 1, ...],
+                    wt=task["amsua_{}".format(prefix)].permute(0, 3, 2, 1)[
+                        :, i : i + 1, ...
+                    ],
                     x_out=self.int_grid,
                 )
             )
@@ -223,12 +277,17 @@ class ConvCNPWeather(nn.Module):
 
         encodings = []
         task["amsub_{}".format(prefix)][task["amsub_{}".format(prefix)] == 0] = np.nan
-        x_in = [task["amsub_x_{}_lon".format(prefix)], task["amsub_x_{}_lat".format(prefix)]]
-        for i in range(10): # TODO This is 12 for them but 10 for us?
+        x_in = [
+            task["amsub_x_{}_lon".format(prefix)],
+            task["amsub_x_{}_lat".format(prefix)],
+        ]
+        for i in range(10):  # TODO This is 12 for them but 10 for us?
             encodings.append(
                 self.amsub_setconvs[i](
                     x_in=x_in,
-                    wt=task["amsub_{}".format(prefix)].permute(0, 3, 1, 2)[:, i : i + 1, ...],
+                    wt=task["amsub_{}".format(prefix)].permute(0, 3, 1, 2)[
+                        :, i : i + 1, ...
+                    ],
                     x_out=self.int_grid,
                 )
             )
@@ -248,7 +307,9 @@ class ConvCNPWeather(nn.Module):
             encodings.append(
                 self.hirs_setconvs[i](
                     x_in=task["hirs_x_{}".format(prefix)],
-                    wt=task["hirs_{}".format(prefix)].permute(0, 3, 1, 2)[:, i : i + 1, ...],
+                    wt=task["hirs_{}".format(prefix)].permute(0, 3, 1, 2)[
+                        :, i : i + 1, ...
+                    ],
                     x_out=self.int_grid,
                 )
             )
@@ -262,7 +323,10 @@ class ConvCNPWeather(nn.Module):
         """
 
         encodings = []
-        x_in = [task["igra_x_{}_lon".format(prefix)], task["igra_x_{}_lat".format(prefix)]]
+        x_in = [
+            task["igra_x_{}_lon".format(prefix)],
+            task["igra_x_{}_lat".format(prefix)],
+        ]
         for channel in range(24):
             encodings.append(
                 self.igra_setconvs[channel](
@@ -280,8 +344,12 @@ class ConvCNPWeather(nn.Module):
         Data preprocessing for ASCAT
         """
 
-        task["ascat_{}".format(prefix)][torch.isnan(task["ascat_{}".format(prefix)])] = 0
-        e = nn.functional.interpolate(task["ascat_{}".format(prefix)].permute(0, 3, 1, 2), size=(240, 121))
+        task["ascat_{}".format(prefix)][
+            torch.isnan(task["ascat_{}".format(prefix)])
+        ] = 0
+        e = nn.functional.interpolate(
+            task["ascat_{}".format(prefix)].permute(0, 3, 1, 2), size=(240, 121)
+        )
         e = torch.flip(e, dims=[-1])
         return e
 
@@ -291,7 +359,9 @@ class ConvCNPWeather(nn.Module):
         """
 
         task["iasi_{}".format(prefix)][torch.isnan(task["iasi_{}".format(prefix)])] = 0
-        e = nn.functional.interpolate(task["iasi_{}".format(prefix)].permute(0, 3, 1, 2), size=(240, 121))
+        e = nn.functional.interpolate(
+            task["iasi_{}".format(prefix)].permute(0, 3, 1, 2), size=(240, 121)
+        )
         e = torch.flip(e, dims=[-1])
         return e
 
@@ -343,7 +413,8 @@ class ConvCNPWeather(nn.Module):
                     self.encoder_hirs(task, "prev"),
                     elev,
                     task["climatology_current"],
-                    torch.ones_like(elev[:, :5, ...]) * task["aux_time_current"].unsqueeze(-1).unsqueeze(-1),
+                    torch.ones_like(elev[:, :5, ...])
+                    * task["aux_time_current"].unsqueeze(-1).unsqueeze(-1),
                 ]
             encodings = [i.cuda() for i in encodings]
             batch_size = encodings[0].shape[0]
@@ -367,7 +438,9 @@ class ConvCNPWeather(nn.Module):
 
         # Process outputs
 
-        if np.logical_and(self.mode == "assimilation", self.decoder == "vit_assimilation"):
+        if np.logical_and(
+            self.mode == "assimilation", self.decoder == "vit_assimilation"
+        ):
             x = nn.functional.interpolate(x.permute(0, 3, 1, 2), size=(240, 121))
             return x.permute(0, 3, 2, 1)
 

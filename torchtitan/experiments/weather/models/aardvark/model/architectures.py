@@ -17,7 +17,9 @@ class DownscalingMLP(nn.Module):
     Mirrors the structure used in working_dir with residual blocks.
     """
 
-    def __init__(self, in_channels: int, out_channels: int, h_channels: int, h_layers: int):
+    def __init__(
+        self, in_channels: int, out_channels: int, h_channels: int, h_layers: int
+    ):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(in_channels, h_channels),

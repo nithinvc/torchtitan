@@ -67,7 +67,9 @@ class CylindricalConvTranspose2D(nn.ConvTranspose2d):
 
         self._bias = nn.Parameter(10**-3 * torch.randn(out_channels))
 
-    def forward(self, input: torch.Tensor, output_size: list[int] | None = None) -> torch.Tensor:
+    def forward(
+        self, input: torch.Tensor, output_size: list[int] | None = None
+    ) -> torch.Tensor:
         Nh = input.shape[2] * self.sh
         Nw = input.shape[3] * self.sw
 
@@ -94,11 +96,17 @@ class Down(nn.Module):
         self.film = film
         self.attn = attn
 
-        self.conv_1 = CylindricalConv2D(in_channels, out_channels, kernel_size=3, stride=1)
+        self.conv_1 = CylindricalConv2D(
+            in_channels, out_channels, kernel_size=3, stride=1
+        )
         if down:
-            self.conv_2 = CylindricalConv2D(out_channels, out_channels, kernel_size=3, stride=2)
+            self.conv_2 = CylindricalConv2D(
+                out_channels, out_channels, kernel_size=3, stride=2
+            )
         else:
-            self.conv_2 = CylindricalConv2D(out_channels, out_channels, kernel_size=3, stride=1)
+            self.conv_2 = CylindricalConv2D(
+                out_channels, out_channels, kernel_size=3, stride=1
+            )
 
         self.bn_1 = nn.BatchNorm2d(out_channels)
         self.bn_2 = nn.BatchNorm2d(out_channels)
@@ -119,7 +127,9 @@ class Down(nn.Module):
                 torch.zeros(10, out_channels, 1, 1),
             )
 
-    def forward(self, xi: torch.Tensor, film_index: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(
+        self, xi: torch.Tensor, film_index: torch.Tensor | None = None
+    ) -> torch.Tensor:
         film_index = (
             film_index[:, 0].int()
             if film_index is not None
@@ -166,7 +176,9 @@ class Up(nn.Module):
                 align_corners=True,
             )
         else:
-            self.up = CylindricalConvTranspose2D(in_channels, out_channels, kernel_size=3, stride=stride)  # type: ignore
+            self.up = CylindricalConvTranspose2D(
+                in_channels, out_channels, kernel_size=3, stride=stride
+            )  # type: ignore
 
         self.conv = Down(
             out_channels,
@@ -177,7 +189,9 @@ class Up(nn.Module):
             attn=attn,
         )
 
-    def forward(self, x1: torch.Tensor, x2: torch.Tensor, film_index: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(
+        self, x1: torch.Tensor, x2: torch.Tensor, film_index: torch.Tensor | None = None
+    ) -> torch.Tensor:
         x1 = self.up(x1)
         x1 = self.conv(x1, film_index=film_index)
 
@@ -275,7 +289,9 @@ class Unet(nn.Module):
             bias=False,
         )
 
-    def forward(self, x: torch.Tensor, film_index: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, film_index: torch.Tensor | None = None
+    ) -> torch.Tensor:
         x1 = x.contiguous()
         x2 = self.down1(x1, film_index=film_index)
         x3 = self.down2(x2, film_index=film_index)

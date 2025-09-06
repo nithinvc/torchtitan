@@ -217,10 +217,14 @@ def convert_to_aardvark_format(src: dict, trg: dict) -> tuple[dict, dict]:
     #### ASSIMILATION
     inputs["assimilation"] = {}
     for var in ["tas", "tds", "psl", "ws", "wd"]:
-        inputs["assimilation"][f"x_context_hadisd_current_{var}"] = hadisd_coords(src, var) 
+        inputs["assimilation"][f"x_context_hadisd_current_{var}"] = hadisd_coords(
+            src, var
+        )
 
     for var in ["tas", "tds", "psl", "ws", "wd"]:
-        inputs["assimilation"][f"y_context_hadisd_current_{var}"] = src["hadisd"][var]["observation"]
+        inputs["assimilation"][f"y_context_hadisd_current_{var}"] = src["hadisd"][var][
+            "observation"
+        ]
 
     climatology_current = era_climatology
     inputs["assimilation"]["climatology_current"] = climatology_current
@@ -337,7 +341,7 @@ def convert_to_aardvark_format(src: dict, trg: dict) -> tuple[dict, dict]:
     target = trg["hadisd"][target_var]["observation"]
 
     # standardize to float32
-    inputs = dict_to_tensordict(inputs).float() 
+    inputs = dict_to_tensordict(inputs).float()
     target = target.float()
     return inputs, target
 

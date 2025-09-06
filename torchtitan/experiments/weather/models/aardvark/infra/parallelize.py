@@ -60,7 +60,6 @@ def parallelize_aardvark(
     return model
 
 
-
 def apply_ddp(
     model: nn.Module,
     dp_mesh: DeviceMesh,

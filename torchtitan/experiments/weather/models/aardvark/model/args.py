@@ -9,7 +9,7 @@ from torchtitan.protocols.train_spec import BaseModelArgs
 @dataclass
 class AardvarkModelArgs(BaseModelArgs):
     lead_time: int = 1
-    return_gridded: bool = False # TODO Not sure default or what they use
+    return_gridded: bool = False  # TODO Not sure default or what they use
 
     def update_from_config(self, job_config: JobConfig, **kwargs) -> None:
         pass
