@@ -148,7 +148,7 @@ class WeatherSources:
         hadisd = xr.open_dataset(join(data_path, "hadisd_data_v1.nc"))
         # hirs = xr.open_dataset(join(data_path, "hirs_data_v1.nc"))
         # print("Loaded hirs")
-        iasi = xr.open_dataset(join(data_path, "iasi_data_v1.nc"))
+        iasi = xr.open_dataset(join(data_path, "iasi_v1.nc"))
         icoads = xr.open_dataset(join(data_path, "icoads_data_v1.nc"))
         igra = xr.open_dataset(join(data_path, "igra_data_v1.nc"))
         return WeatherSources(amsua, amsub, ascat, gridsat, hadisd, iasi, icoads, igra)
