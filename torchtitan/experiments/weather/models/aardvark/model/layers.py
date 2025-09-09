@@ -24,7 +24,7 @@ class ConvDeepSet(nn.Module):
 
     def compute_weights(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
         dists2 = self.pw_dists2(x1.unsqueeze(-1), x2.unsqueeze(-1))
-        return torch.exp((-0.5 * dists2) / (self.init_ls).pow(2))
+        return torch.exp((-0.5 * dists2) / ((self.init_ls ).pow(2) + 1e-6))
 
     def pw_dists2(self, a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
         norms_a = torch.sum(a.pow(2), dim=-1)[..., :, None].float()
